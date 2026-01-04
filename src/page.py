@@ -42,7 +42,7 @@ class Page:
             self.num_rows = self.header_struct.unpack(raw_data[: Page.HEADER_SIZE])[0]
             print("Number of Rows : ", self.num_rows)
         else:
-            self.data: bytearray = bytearray(Page.HEADER_SIZE + Page.PAGE_SIZE)
+            self.data: bytearray = bytearray(Page.PAGE_SIZE)
             self.num_rows = 0
 
     def _update_header(self):

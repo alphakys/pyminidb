@@ -68,7 +68,7 @@ def test_repl_e2e():
         return
 
     # Verify Persistence
-    if os.path.exists(db_file) and os.path.getsize(db_file) >= 4105:
+    if os.path.exists(db_file) and os.path.getsize(db_file) >= 4096:
         print("   ✅ DB file created and written.")
     else:
         print("   ❌ Persistence check failed.")
