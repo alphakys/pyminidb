@@ -1,7 +1,9 @@
 import pathlib
+import os
+
 from src.page import Page
 from io import BufferedRandom
-from typing import Optional
+from typing import Optional, Union
 
 
 class Pager:
@@ -11,20 +13,18 @@ class Pager:
     """
 
     def __init__(self, filename: str):
-        self.filename: pathlib.Path = pathlib.Path(filename)
-
-        # [TODO 1] 파일 열기 로직 구현
+        self.file_path: pathlib.Path = pathlib.Path(filename)
         # 1. 파일이 존재하는지 확인 (os.path.exists)
         # 2. 없으면 빈 파일 생성 ('wb' 모드로 열었다 닫기)
         # 3. 'rb+' 모드로 파일 열어서 self.file에 저장
-
-        if not self.filename.exists():
-            with self.filename.open("wb"):
+        if not self.file_path.exists():
+            with self.file_path.open("wb"):
                 pass
 
-        self.file: BufferedRandom = self.filename.open("rb+")
+        self.file: BufferedRandom = self.file_path.open("rb+")
+        return None
 
-    def read_page(self, page_num: int) -> Optional[Page]:
+    def read_page(self, page_num: int) -> Page:
         """
         [TODO 2] 파일에서 특정 페이지를 읽어옵니다.
         1. 페이지가 파일 범위를 벗어나는지 확인 (Optional)
@@ -39,7 +39,7 @@ class Pager:
         if buffered_data:
             return Page(buffered_data)
         else:
-            return None
+            return Page()
 
     def write_page(self, page_num: int, page: Page):
         """

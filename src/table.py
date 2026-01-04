@@ -4,6 +4,8 @@ from src.row import Row
 from src.cursor import Cursor
 from typing import Optional
 
+import os
+
 
 class Table:
     """
@@ -15,6 +17,11 @@ class Table:
     def __init__(self, filename="mydb.db"):
         # 물리 계층을 다루는 module Pager로부터 filename(path)에 해당하는 데이터 덩어리를 불러온다.
         self.pager = Pager(filename)
+        self.file_size = os.path.getsize(filename)
+        # Table이 물리 계층에서 읽어온 raw data가 X번 페이지에서 읽어왔다는 것을 표시해줄 메타데이터
+        self.page_num = self.file_size // Page.PAGE_SIZE
+        print(self.file_size, Page.PAGE_SIZE)
+        self.page = self.pager.read_page(self.page_num)
 
         # [Phase 2] Page 0의 헤더에서 전체 Row 개수를 읽어와야 함
         # 임시로 0으로 시작하지만, 곧 수정할 예정
@@ -32,19 +39,16 @@ class Table:
         return Cursor(self, self.num_rows)
 
     def execute_insert(self, id: int, username: str, email: str) -> bool:
+        # 데이터베이스 스키마 해석기 현재 구현하지 않았기 때문에 Row가 가지는 column이
+        # id, username, email로 현재는! 고정됨
+
         # [Refactoring Goal]
         # cursor = self.table_end()
         # cursor.save(Row(id, username, email))
 
-        # [Legacy Logic - For Compatibility during migration]
-        curr_page: Page = self.pager.read_page(0)
-        if not curr_page:
-            curr_page = Page()
-
-        is_success = curr_page.insert(Row(int(id), username, email))
+        is_success = self.page.insert(Row(int(id), username, email))
         if is_success:
-            self.pager.write_page(page_num=0, page=curr_page)
-            self.num_rows += 1
+            self.pager.write_page(page_num=self.page_num, page=self.page)
             return True
         else:
             return False
@@ -56,13 +60,15 @@ class Table:
         #     print(cursor.current_cell())
         #     cursor.advance()
 
-        # [Legacy Logic]
-        curr_page = self.pager.read_page(page_num=0)
-        if curr_page:
-            for i in range(curr_page.num_rows):
-                print(curr_page.read_at(i))
+        if self.page:
+            for i in range(self.page.num_rows):
+                print(self.page.read_at(i))
         else:
             print("No data Found")
 
     def close(self):
         self.pager.close()
+
+
+if __name__ == "__main__":
+    print(Table())

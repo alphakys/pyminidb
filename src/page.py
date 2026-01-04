@@ -10,7 +10,7 @@ class Page:
 
     Page의 앞단 9byte를 header 영역으로 둔다.
 
-    NumCells: 현재 페이지에 저장된 Row 개수 (우리가 필요한 것!)
+    NumRows: 현재 페이지에 저장된 Row 개수 (우리가 필요한 것!)
     PageType: 이게 데이터를 담는 리프 노드인지, 인덱스 노드인지 등.
     FreeSpace: 남은 공간이 얼만큼인지.
     NextPageId: (B-Tree 연결을 위한) 다음 페이지 번호.
@@ -40,7 +40,6 @@ class Page:
         if raw_data:
             self.data: bytearray = bytearray(raw_data)
             self.num_rows = self.header_struct.unpack(raw_data[: Page.HEADER_SIZE])[0]
-
         else:
             self.data: bytearray = bytearray(Page.PAGE_SIZE)
             self.num_rows = 0

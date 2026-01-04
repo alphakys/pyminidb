@@ -70,7 +70,7 @@ class Row:
 
     def __repr__(self):
         return (
-            f"user_id : {self.user_id} \nusername: {self.username}\nemail: {self.email}"
+            f"Row(id={self.user_id}, username='{self.username}', email='{self.email}')"
         )
 
 
