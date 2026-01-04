@@ -17,9 +17,9 @@ class Page:
     """
 
     # OS Page Size
-    PAGE_SIZE: ClassVar[int] = 4096
+    PAGE_SIZE: ClassVar[int] = 1024
     ROW_SIZE: ClassVar[int] = Row(0, "", "").size
-    MAX_ROWS: ClassVar[int] = PAGE_SIZE // ROW_SIZE
+    MAX_ROWS: ClassVar[int] = (PAGE_SIZE - 9) // ROW_SIZE
 
     # [New] Header Constants
     HEADER_FORMAT: ClassVar[str] = f"<HBHI"
@@ -40,7 +40,7 @@ class Page:
         if raw_data:
             self.data: bytearray = bytearray(raw_data)
             self.num_rows = self.header_struct.unpack(raw_data[: Page.HEADER_SIZE])[0]
-            print("Number of Rows : ", self.num_rows)
+
         else:
             self.data: bytearray = bytearray(Page.PAGE_SIZE)
             self.num_rows = 0

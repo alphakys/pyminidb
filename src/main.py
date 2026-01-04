@@ -1,50 +1,7 @@
-from src.pager import Pager
-from src.page import Page
-from src.row import Row
+from src.table import Table
 import sys
 
-
-class Table:
-    """
-    DB Engine Core.
-    Pager와 Page를 조율하여 실제 SQL 로직을 수행합니다.
-    (현재는 Page 0만 사용하는 Simplest Ver.)
-    """
-
-    def __init__(self, filename="mydb.db"):
-        self.pager = Pager(filename)
-
-    def execute_insert(self, id: int, username: str, email: str) -> bool:
-        # [TODO 1] Insert Implement
-        # 1. Read Page 0 from Pager
-        # 2. If page is None, create new Page()
-        # 3. Insert Row
-        # 4. Write back to Pager (Persistence)
-        curr_page: Page = self.pager.read_page(0)
-        if not curr_page:
-            curr_page = Page()
-
-        is_success = curr_page.insert(Row(int(id), username, email))
-        if is_success:
-            self.pager.write_page(page_num=0, page=curr_page)
-            return True
-        else:
-            return False
-
-    def execute_select(self):
-        # [TODO 2] Select Implement
-        # 1. Read Page 0
-        # 2. If None, print nothing
-        # 3. Loop and Print all rows (How to know how many rows? page.num_rows)
-        curr_page = self.pager.read_page(page_num=0)
-        if curr_page:
-            for i in range(curr_page.num_rows):
-                print(curr_page.read_at(i))
-        else:
-            print("No data Found")
-
-    def close(self):
-        self.pager.close()
+# Table Class was moved to src/table.py for better architecture.
 
 
 def main():

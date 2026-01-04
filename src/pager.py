@@ -19,7 +19,6 @@ class Pager:
         # 3. 'rb+' 모드로 파일 열어서 self.file에 저장
 
         if not self.filename.exists():
-            print(self.filename.absolute())
             with self.filename.open("wb"):
                 pass
 

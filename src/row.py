@@ -1,9 +1,7 @@
-from dataclasses import dataclass
 import struct
 from typing import ClassVar
 
 
-@dataclass
 class Row:
     """
     [Phase 1 Refactored] Teacher's Reference Implementation
@@ -14,18 +12,21 @@ class Row:
     3. Error Handling: Removed try-except blocks. Errors are propagated to the caller (Fail Fast).
     """
 
-    id: int
-    username: str
-    email: str
-
     # Constants
     ID_SIZE: ClassVar[int] = 4
-    USERNAME_SIZE: ClassVar[int] = 32
-    EMAIL_SIZE: ClassVar[int] = 255
+    USERNAME_SIZE: ClassVar[int] = 10
+    EMAIL_SIZE: ClassVar[int] = 30
 
     # Format: Little-endian (<), int, 32s, 255s
     STRUCT_FORMAT: ClassVar[str] = f"<i{USERNAME_SIZE}s{EMAIL_SIZE}s"
     _struct: ClassVar[struct.Struct] = struct.Struct(STRUCT_FORMAT)
+
+    __slots__ = ("user_id", "username", "email")
+
+    def __init__(self, user_id: int, username: str, email: str):
+        self.user_id: int = user_id
+        self.username: str = username
+        self.email: str = email
 
     def serialize(self) -> bytes:
         # 1. Encode strings
@@ -34,7 +35,7 @@ class Row:
 
         # 2. Validation (Critical Step!)
         # struct.pack silently truncates strings. We MUST catch this.
-        if not isinstance(self.id, int):
+        if not isinstance(self.user_id, int):
             raise ValueError("id must be integer")
 
         if len(username_bytes) > self.USERNAME_SIZE:
@@ -49,7 +50,7 @@ class Row:
 
         # 3. Pack
         # No try-except: If packing fails, we WANT the DB to crash or handle it explicitly.
-        return self._struct.pack(self.id, username_bytes, email_bytes)
+        return self._struct.pack(self.user_id, username_bytes, email_bytes)
 
     @classmethod
     def deserialize(cls, data: bytes) -> "Row":
@@ -61,8 +62,18 @@ class Row:
         username = unpacked[1].rstrip(b"\x00").decode("utf-8")
         email = unpacked[2].rstrip(b"\x00").decode("utf-8")
 
-        return cls(id=unpacked[0], username=username, email=email)
+        return cls(user_id=unpacked[0], username=username, email=email)
 
     @property
     def size(self):
         return self._struct.size
+
+    def __repr__(self):
+        return (
+            f"user_id : {self.user_id} \nusername: {self.username}\nemail: {self.email}"
+        )
+
+
+if __name__ == "__main__":
+    r = Row(1, "sdf", "sdfsdf")
+    print(r)
