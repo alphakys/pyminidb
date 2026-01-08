@@ -22,7 +22,20 @@ class Cursor:
          '가교(Bridge)' 역할을 수행합니다.
     """
 
-    def __init__(self, table, row_num):
+    def __init__(self, table, row_num = 0):
+        # cursor가 상태를 표시할 table
         self.table = table
-        self.row_num = row_num
-        self.end_of_table = False
+        # cursor 초기화 시에는 0의 row_index에 위치한다.
+        self.curr_idx = row_num
+
+
+
+
+    def start_cursor():
+        # 순수하게 page 내에서 row의 위치 정보를 표시한다.
+        # 또는 row의 status를 표시한다.
+        offset = Page.HEADER_SIZE + (row_index * Page.ROW_SIZE)
+        end = offset + Page.ROW_SIZE
+        raw_data = self.data[offset:end]
+    # cursor는 상태를 가진다. row의 위치를 표시하는 것뿐만 아니라 그 상태까지 표시한다.
+    def

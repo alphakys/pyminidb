@@ -22,7 +22,6 @@ class Pager:
                 pass
 
         self.file: BufferedRandom = self.file_path.open("rb+")
-        return None
 
     def read_page(self, page_num: int) -> Page:
         """

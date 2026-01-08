@@ -17,7 +17,7 @@ class Row:
     USERNAME_SIZE: ClassVar[int] = 10
     EMAIL_SIZE: ClassVar[int] = 30
 
-    # Format: Little-endian (<), int, 32s, 255s
+    # Format: Little-endian (<), int, 10s, 30s
     STRUCT_FORMAT: ClassVar[str] = f"<i{USERNAME_SIZE}s{EMAIL_SIZE}s"
     _struct: ClassVar[struct.Struct] = struct.Struct(STRUCT_FORMAT)
 
@@ -56,6 +56,7 @@ class Row:
     def deserialize(cls, data: bytes) -> "Row":
         # 1. Unpack
         # unpack raises struct.error if data length is wrong. Let it bubble up.
+        print(data)
         unpacked = cls._struct.unpack(data)
         # 2. Decode and Clean
         # rstrip(b'\x00') removes the null padding added by struct

@@ -5,8 +5,9 @@ import struct
 
 class Page:
     """
-    [Phase 2] Page Abstraction
     4KB 크기의 메모리 블록을 관리하며 여러 Row를 저장합니다.
+    파일 시스템과 소통하는 Pager에서 읽어온 raw bytes 데이터를 페이지라는 단위로
+    분할하여 구조화하는 모듈이다.
 
     Page의 앞단 9byte를 header 영역으로 둔다.
 
@@ -17,7 +18,7 @@ class Page:
     """
 
     # OS Page Size
-    PAGE_SIZE: ClassVar[int] = 1024
+    PAGE_SIZE: ClassVar[int] = 4096
     ROW_SIZE: ClassVar[int] = Row(0, "", "").size
     MAX_ROWS: ClassVar[int] = (PAGE_SIZE - 9) // ROW_SIZE
 
@@ -27,26 +28,18 @@ class Page:
     header_struct: ClassVar[struct.Struct] = struct.Struct(HEADER_FORMAT)
 
     def __init__(self, raw_data: bytes = None):
-        """
-        [TODO 1] 생성자 수정: Header 처리
-        1. raw_data가 None이면: 빈 bytearray 생성, num_rows=0
-        2. raw_data가 있으면:
-           - self.data에 복사
-           - **Header(0~4 byte)**를 읽어서 self.num_rows 복구! <-- 핵심
-        """
-        self.page_type = 0  # Leaf Node default value
+        self.page_type = 0
         self.free_space = 0
         self.next_page_id = 0
         if raw_data:
             self.data: bytearray = bytearray(raw_data)
-            self.num_rows = self.header_struct.unpack(raw_data[: Page.HEADER_SIZE])[0]
+            self.num_rows = self.header_struct.unpack(self.data[: Page.HEADER_SIZE])[0]
         else:
             self.data: bytearray = bytearray(Page.PAGE_SIZE)
             self.num_rows = 0
 
     def _update_header(self):
         """
-        [TODO 2] Helper Helper: Header 동기화
         현재 self.num_rows 값을 self.data[0:4]에 struct.pack으로 기록합니다.
         insert 할 때마다 호출해줘야 디스크에도 개수가 저장되겠죠?
         """
@@ -72,12 +65,11 @@ class Page:
         self._update_header()
         return True
 
-    def read_at(self, index: int) -> Row:
+    def read_at(self, row_index: int) -> Row:
         """
-        [TODO 4] Offset 계산 공식 수정
-        New Offset = HEADER_SIZE + (index * ROW_SIZE)
+        Page내에서 target index Row를 읽는다.
         """
-        offset = Page.HEADER_SIZE + (index * Page.ROW_SIZE)
+        offset = Page.HEADER_SIZE + (row_index * Page.ROW_SIZE)
         end = offset + Page.ROW_SIZE
         raw_data = self.data[offset:end]
         return Row.deserialize(raw_data)
