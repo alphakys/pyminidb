@@ -1,0 +1,317 @@
+# PyMiniDB Architecture: Understanding the Table Module
+
+## 🏛️ The Big Picture: Layered Architecture
+
+DBMS는 복잡성을 관리하기 위해 **계층화된 아키텍처(Layered Architecture)**를 사용합니다. 각 계층은 명확한 책임을 가지며, 상위 계층은 하위 계층의 세부사항을 알 필요가 없습니다. 이것이 바로 **추상화(Abstraction)**의 핵심입니다.
+
+```mermaid
+graph TB
+    subgraph "Application Layer"
+        REPL["REPL (UI)"]
+    end
+
+    subgraph "Logic Layer"
+        Table["Table<br/>(Logical Coordinator)"]
+        Cursor["Cursor<br/>(Position Tracker)"]
+    end
+
+    subgraph "Storage Layer"
+        Page["Page<br/>(Memory Buffer)"]
+        Pager["Pager<br/>(Disk I/O)"]
+    end
+
+    subgraph "Data Layer"
+        Row["Row<br/>(Data Object)"]
+    end
+
+    REPL -->|"insert/select"| Table
+    Table -->|"creates"| Cursor
+    Cursor -->|"reads/writes"| Page
+    Page -->|"serializes"| Row
+    Cursor -->|"requests page"| Pager
+    Pager -->|"returns"| Page
+
+    style Table fill:#e1f5ff
+    style Cursor fill:#fff4e1
+    style Page fill:#ffe1f5
+    style Pager fill:#e1ffe1
+    style Row fill:#f5e1ff
+```
+
+---
+
+## 📦 각 모듈의 역할 (Separation of Concerns)
+
+### 1️⃣ Row (Data Object)
+**책임**: "데이터를 어떻게 저장할까?"
+
+- **역할**: 데이터의 구조와 직렬화/역직렬화 담당
+- **알고 있는 것**: 자신의 필드(id, username, email), 바이트 형식
+- **모르는 것**: 디스크, 페이지, 파일 - 순수 데이터 객체
+- **핵심 메서드**: [serialize()](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/row.py#31-54), [deserialize()](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/row.py#55-67)
+
+```python
+# Row는 순수한 데이터 변환기
+row = Row(1, "alice", "alice@test.com")
+bytes = row.serialize()  # → 44바이트 바이너리
+row2 = Row.deserialize(bytes)  # → Row 객체 복원
+```
+
+---
+
+### 2️⃣ Page (Memory Buffer)
+**책임**: "4KB 메모리 조각을 어떻게 관리할까?"
+
+- **역할**: 고정 크기(4KB) 메모리 블록. Row들을 담는 컨테이너.
+- **알고 있는 것**: 자신의 크기, 헤더, 몇 개의 Row를 담고 있는지
+- **모르는 것**: 디스크에 저장되는 방법, 자신이 몇 번 페이지인지
+- **핵심 메서드**: [insert(row)](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/page.py#53-67), [read_at(index)](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/page.py#68-76), [is_full()](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/page.py#50-52)
+
+```python
+# Page는 메모리상의 데이터 컨테이너
+page = Page()
+page.insert(row)  # Row를 메모리 버퍼에 추가
+page.num_rows  # 현재 담긴 Row 개수
+page.is_full()  # 꽉 찼는지 확인
+```
+
+**중요**: Page는 자신이 **디스크 어디에 저장되는지 모릅니다**. 그냥 메모리상의 바이트 배열일 뿐입니다.
+
+---
+
+### 3️⃣ Pager (Disk I/O Manager)
+**책임**: "디스크와 메모리를 어떻게 연결할까?"
+
+- **역할**: 파일 시스템과 직접 통신. Page 단위로 읽기/쓰기
+- **알고 있는 것**: 파일 핸들, 페이지 번호와 오프셋의 관계
+- **모르는 것**: Page 내부의 Row 구조, 비즈니스 로직
+- **핵심 메서드**: [read_page(page_num)](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/pager.py#26-42), [write_page(page_num, page)](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/pager.py#43-53)
+
+```python
+# Pager는 디스크↔메모리 전송 담당
+pager = Pager("mydb.db")
+page = pager.read_page(0)  # 0번 페이지를 디스크에서 읽어서 메모리로
+pager.write_page(1, page)  # 메모리의 page를 1번 위치에 기록
+```
+
+**중요**: Pager는 Page 내부에 무슨 데이터가 있는지 **신경 쓰지 않습니다**. 그냥 바이트 덩어리를 옮길 뿐입니다.
+
+---
+
+### 4️⃣ Cursor (Position Tracker & Navigator)
+**책임**: "테이블의 특정 위치를 어떻게 가리킬까?"
+
+- **역할**: 테이블 내 현재 위치(`row_num`)를 추적하고, 그 위치의 데이터를 읽거나 쓰기
+- **알고 있는 것**: 
+  - 현재 위치 (`row_num`)
+  - 그 위치가 어느 페이지의 몇 번째 셀인지 계산하는 방법
+  - [Table](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/table.py#10-69) 참조 (Pager를 통해 페이지 로드)
+- **모르는 것**: SQL 구문, 트랜잭션, 전체 DB 구조
+- **핵심 메서드**: `current_cell()`, [advance()](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/tests/test_cursor_unit.py#34-55), [save(row)](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/tests/test_cursor_unit.py#34-55)
+
+```python
+# Cursor는 테이블 내 "손가락"
+cursor = table.table_start()  # 0번 위치
+row = cursor.current_cell()   # 현재 위치의 데이터 읽기
+cursor.advance()              # 다음 위치로 이동
+cursor.save(new_row)          # 현재 위치에 데이터 쓰기
+```
+
+**핵심 로직**:
+```python
+# row_num = 95 (예시)
+page_num = row_num // MAX_ROWS  # 95 // 92 = 1 (1번 페이지)
+cell_num = row_num % MAX_ROWS   # 95 % 92 = 3 (페이지 내 3번째 셀)
+
+page = table.pager.read_page(page_num)  # 1번 페이지 로드
+row = page.read_at(cell_num)            # 3번째 셀 읽기
+```
+
+---
+
+### 5️⃣ Table (Logical Coordinator)
+**책임**: "논리적 데이터베이스로서 전체를 어떻게 조율할까?"
+
+#### 🎯 Table의 3대 핵심 역할
+
+##### ① Metadata Manager (메타데이터 관리자)
+```python
+class Table:
+    def __init__(self, filename):
+        self.pager = Pager(filename)
+        self.num_rows = 0  # 전체 Row 개수 추적
+        # ... 파일에서 num_rows 복구 로직
+```
+
+- **전체 Row 개수 추적**: DB 전체에 몇 개의 Row가 있는지 관리
+- **스키마 정보**: (미래) 어떤 컬럼들이 있는지, 타입은 무엇인지
+- **DB 상태**: DB가 열려있는지, 닫혀있는지
+
+##### ② Cursor Factory (커서 생성자)
+```python
+def table_start(self) -> Cursor:
+    """첫 번째 Row를 가리키는 커서 반환"""
+    return Cursor(self, row_num=0)
+
+def table_end(self) -> Cursor:
+    """마지막 Row 다음(삽입 위치)을 가리키는 커서 반환"""
+    return Cursor(self, row_num=self.num_rows)
+```
+
+- Cursor에게 `self` (Table 참조)를 전달하여, Cursor가 Pager에 접근할 수 있게 함
+- 사용자는 직접 Cursor를 만들지 않고, Table을 통해서만 받음
+
+##### ③ High-Level Operation Provider (고수준 연산 제공자)
+```python
+def execute_insert(self, id, username, email):
+    """사용자 친화적인 insert 연산"""
+    cursor = self.table_end()          # 끝 위치 커서 생성
+    row = Row(id, username, email)     # Row 객체 생성
+    cursor.save(row)                   # Cursor에게 저장 위임
+    self.num_rows += 1                 # 메타데이터 갱신
+
+def execute_select(self):
+    """전체 Row 조회"""
+    cursor = self.table_start()        # 시작 위치 커서 생성
+    while not cursor.end_of_table:     # 끝까지 반복
+        print(cursor.current_cell())   # 현재 Row 출력
+        cursor.advance()               # 다음으로 이동
+```
+
+---
+
+## 🔄 Interaction Scenario: INSERT 연산의 여정
+
+"사용자가 `insert 100 alice alice@test.com`을 입력했을 때 무슨 일이 일어나는가?"
+
+```mermaid
+sequenceDiagram
+    participant U as REPL
+    participant T as Table
+    participant C as Cursor
+    participant P as Pager
+    participant Pg as Page
+    participant R as Row
+
+    U->>T: execute_insert(100, "alice", "alice@test.com")
+    T->>T: row_num = self.num_rows (현재 99)
+    T->>C: cursor = Cursor(self, 99)
+    T->>R: row = Row(100, "alice", ...)
+    T->>C: cursor.save(row)
+    
+    C->>C: page_num = 99 // 92 = 1
+    C->>C: cell_num = 99 % 92 = 7
+    C->>P: page = pager.read_page(1)
+    P-->>C: Page 객체 반환
+    C->>Pg: page.insert(row)
+    Pg->>Pg: offset = HEADER + (7 * ROW_SIZE)
+    Pg->>Pg: data[offset:end] = row.serialize()
+    Pg->>Pg: num_rows += 1
+    Pg->>Pg: _update_header()
+    Pg-->>C: True
+    C->>P: pager.write_page(1, page)
+    P->>P: file.seek(1 * 4096)
+    P->>P: file.write(page.data)
+    C-->>T: Success
+    T->>T: self.num_rows += 1 (now 100)
+```
+
+### 📋 단계별 설명
+
+1. **REPL → Table**: 사용자 명령을 Table의 고수준 메서드로 전달
+2. **Table**: 메타데이터(`num_rows`)를 기반으로 삽입 위치 계산
+3. **Table → Cursor**: 삽입 위치를 가리키는 Cursor 생성
+4. **Table → Row**: 데이터를 Row 객체로 변환
+5. **Cursor**: `row_num`을 [(page_num, cell_num)](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/row.py#5-76)으로 변환
+6. **Cursor → Pager**: 해당 페이지를 요청
+7. **Pager**: 디스크에서 4KB를 읽어 Page 객체 생성
+8. **Cursor → Page**: Row를 삽입
+9. **Page**: 내부 버퍼에 Row를 직렬화하여 저장, 헤더 갱신
+10. **Cursor → Pager**: 수정된 Page를 디스크에 기록
+11. **Table**: 메타데이터(`num_rows`) 갱신
+
+---
+
+## 🚫 중요한 원칙들
+
+### ❌ Table이 하지 말아야 할 것
+
+```python
+# 나쁜 예: Table이 직접 Page를 조작
+def execute_insert(self, ...):
+    page = self.pager.read_page(0)  # ❌ Page 번호를 하드코딩
+    page.insert(row)                # ❌ 직접 조작
+```
+
+**왜 나쁜가?**
+- Page 0이 꽉 차면? Table이 그걸 알아야 함
+- Multi-page 로직이 Table에 섞이면 복잡도 폭발
+- Cursor의 존재 이유가 사라짐
+
+### ✅ Table이 해야 할 것
+
+```python
+# 좋은 예: Cursor에게 위임
+def execute_insert(self, ...):
+    cursor = self.table_end()    # ✅ Cursor 생성
+    cursor.save(Row(...))        # ✅ 위임
+    self.num_rows += 1           # ✅ 메타데이터만 관리
+```
+
+**왜 좋은가?**
+- Page 전환 로직은 Cursor가 처리
+- Table은 "얼마나 있는지"만 알면 됨
+- 각 모듈이 Single Responsibility를 지킴
+
+---
+
+## 💡 핵심 통찰: "누가 무엇을 알아야 하는가?"
+
+| 모듈 | 알아야 하는 것 | 몰라도 되는 것 |
+|------|---------------|---------------|
+| **Row** | 자신의 필드, 직렬화 방법 | 페이지, 디스크, 파일 |
+| **Page** | 4KB 버퍼, 헤더, Row 개수 | 자신이 몇 번 페이지인지, 디스크 위치 |
+| **Pager** | 파일 핸들, 오프셋 계산 | Page 내부 구조, Row 형식 |
+| **Cursor** | 현재 위치, 페이지 계산 공식 | SQL, 트랜잭션 |
+| **Table** | 전체 Row 개수, Cursor 생성 | Page 내부 구조, 디스크 I/O |
+
+---
+
+## 🎓 철학적 질문: "Table은 왜 Page를 직접 다루면 안 될까?"
+
+**답**: **추상화 위반(Abstraction Leak)**이 발생하기 때문입니다.
+
+만약 Table이 `page.insert()`를 직접 호출한다면:
+1. Page가 꽉 찼는지 Table이 확인해야 함 → `if page.is_full(): ...`
+2. 다음 페이지로 넘어가는 로직을 Table이 작성해야 함
+3. Row가 어느 페이지에 있는지 Table이 추적해야 함
+
+이렇게 되면 **"물리적 저장소 관리 로직"**이 **"논리적 테이블 관리 로직"**과 뒤섞이게 됩니다.
+
+반면 Cursor를 사용하면:
+```python
+cursor = table.table_end()  # "맨 끝"이라는 논리적 위치만 요청
+cursor.save(row)            # 저장은 Cursor에게 위임
+```
+
+Table은 "어디에 저장할까?"를 고민하지 않습니다. 그냥 "끝에 추가해줘"라고만 하면 됩니다.
+
+---
+
+## 🏁 결론: Table의 정체성
+
+**Table은 조율자(Coordinator)입니다.**
+
+- 직접 데이터를 만지지 않습니다. (그건 Row의 일)
+- 직접 메모리를 관리하지 않습니다. (그건 Page의 일)
+- 직접 디스크에 쓰지 않습니다. (그건 Pager의 일)
+- 직접 위치를 계산하지 않습니다. (그건 Cursor의 일)
+
+**Table은**:
+- Pager를 생성/종료하여 DB를 열고 닫습니다.
+- 전체 Row 개수 같은 메타데이터를 관리합니다.
+- 사용자에게 [insert](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/page.py#53-67), [select](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/table.py#55-66) 같은 **친화적인 인터페이스**를 제공합니다.
+- 필요할 때 Cursor를 생성하여 **실제 작업을 위임**합니다.
+
+이것이 DBMS의 아름다움입니다. 각자 자기 일만 하면, 전체가 조화롭게 돌아갑니다. 🎼
+

@@ -1,68 +1,48 @@
 import os
 import subprocess
-from src.row import Row
 from src.page import Page
 
 
-def test_multi_page_persistence():
-    print("=== [Phase 2] Stress Test: 100 Rows & Multi-Page ===")
+def run_db_command(commands):
+    input_text = "\n".join(commands + [".exit"])
+    process = subprocess.Popen(
+        ["python3", "src/main.py"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.getcwd()},
+    )
+    stdout, _ = process.communicate(input=input_text, timeout=10)
+    return stdout
 
+
+def test_strict_persistence():
+    print("=== [Phase 2] Strict Persistence Stress Test ===")
     db_file = "mydb.db"
     if os.path.exists(db_file):
         os.remove(db_file)
 
-    # 1. Generate 100 Insert Commands
-    insert_commands = [f"insert {i} user{i} user{i}@test.com" for i in range(1, 101)]
-    input_text = "\n".join(insert_commands + ["select", ".exit"])
+    # 1. 분할 삽입 (데이터를 넣고 DB를 완전히 종료)
+    print("1. Inserting 100 rows and CLOSING the DB...")
+    insert_cmds = [f"insert {i} user{i} user{i}@test.com" for i in range(1, 101)]
+    run_db_command(insert_cmds)
 
-    print(f"1. Inserting 100 rows into {db_file}...")
-    try:
-        process = subprocess.Popen(
-            ["python3", "src/main.py"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env={**os.environ, "PYTHONPATH": os.getcwd()},
-        )
+    # 2. 새로운 세션에서 조회 (이때가 진짜 실력!)
+    print("2. Re-opening DB in a NEW session and verifying...")
+    output = run_db_command(["select"])
 
-        stdout, stderr = process.communicate(input=input_text, timeout=10)
+    all_lines = output.splitlines()
+    row_count = sum(1 for line in all_lines if "Row(id=" in line)
 
-    except subprocess.TimeoutExpired:
-        process.kill()
-        print("   ❌ Timeout! Too slow or stuck in loop.")
-        return
-
-    # 2. Check File Size (Should be multiple pages)
-    # 100 rows / 14 rows_per_page = 7.14 -> 8 pages expected
-    expected_min_size = (Page.PAGE_SIZE // 44) + int((Page.PAGE_SIZE % 44) > 0)
-    actual_size = os.path.getsize(db_file) if os.path.exists(db_file) else 0
-
-    print(f"2. Verifying File Size...")
-    if actual_size >= expected_min_size:
-        print(
-            f"   ✅ Success: File size is {actual_size} bytes (~{actual_size // Page.PAGE_SIZE} pages)."
-        )
+    if row_count == 100:
+        print(f"   ✅ Success: Recovered all {row_count} rows across sessions!")
     else:
-        print(
-            f"   ❌ Fail: File size is only {actual_size} bytes. (Expected >= {expected_min_size})"
-        )
-        print("      Hint: Still hardcoded to Page 0?")
-        return
-
-    # 3. Verify All Data Found
-    print("3. Verifying Data Consistency...")
-    all_lines = stdout.splitlines()
-    found_count = sum(1 for line in all_lines if "Row(id=" in line)
-
-    if found_count == 100:
-        print(f"   ✅ Success: Found all {found_count} rows in output.")
-    else:
-        print(f"   ❌ Fail: Found only {found_count}/100 rows.")
-        return
-
-    print("\n🎉 Phase 2 Stress Test Passed! You've broken the 14-row limit.")
+        print(f"   ❌ Fail: Only recovered {row_count}/100 rows.")
+        # Check for error messages
+        if "struct.error" in output:
+            print("   ⚠️ Found struct.error in output - Data clipping detected!")
 
 
 if __name__ == "__main__":
-    test_multi_page_persistence()
+    test_strict_persistence()

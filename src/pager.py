@@ -23,16 +23,16 @@ class Pager:
 
         self.file: BufferedRandom = self.file_path.open("rb+")
 
-    def read_page(self, page_num: int) -> Page:
+    def read_page(self, page_index: int) -> Page:
         """
         [TODO 2] 파일에서 특정 페이지를 읽어옵니다.
         1. 페이지가 파일 범위를 벗어나는지 확인 (Optional)
-        2. seek()로 위치 이동 (page_num * PAGE_SIZE)
+        2. seek()로 위치 이동 (page_index * PAGE_SIZE)
         3. read(PAGE_SIZE)로 바이트 읽기
         4. 읽은 데이터가 없으면 빈 Page 반환
         5. 있으면 Page 객체에 데이터 채워서 반환
         """
-        self.file.seek(page_num * Page.PAGE_SIZE)
+        self.file.seek(page_index * Page.PAGE_SIZE)
         buffered_data: bytes = self.file.read(Page.PAGE_SIZE)
 
         if buffered_data:
@@ -40,14 +40,14 @@ class Pager:
         else:
             return Page()
 
-    def write_page(self, page_num: int, page: Page):
+    def write_page(self, page_index: int, page: Page):
         """
         [TODO 3] 데이터를 파일에 저장합니다.
         1. seek()로 위치 이동
         2. write()로 page.data 쓰기
         3. flush()로 동기화
         """
-        self.file.seek(page_num * Page.PAGE_SIZE)
+        self.file.seek(page_index * Page.PAGE_SIZE)
         self.file.write(page.data)
         self.file.flush()
 

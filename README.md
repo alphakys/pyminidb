@@ -45,7 +45,7 @@ graph TD
 데이터베이스는 데이터를 스트림으로 저장하지 않고, 이렇게 페이지 단위로 나누어 관리합니다.
 
 *   **구조**:
-    *   **Header (9 bytes)**: 메타데이터 (`NumRows`, `PageType`, `FreeSpace`, `NextPageId`) 저장.
+    *   **Header (9 bytes)**: 메타데이터 (`row_count`, `PageType`, `FreeSpace`, `NextPageId`) 저장.
     *   **Body (4087 bytes)**: 약 14개의 Row 저장 가능.
 *   **설계 경험**: "Header(9) + Body(4096)"로 인해 파일이 깨지는 정렬(Alignment) 문제를 겪었습니다. 이를 해결하기 위해 **Header를 4096바이트 규격 안에 포함**시키는 설계를 채택했습니다.
 
@@ -69,7 +69,7 @@ graph TD
 ### Header Format (`<HBHI`)
 | Offset | Field | Type | Size | Description |
 |--------|-------|------|------|-------------|
-| 0 | **NumCells** | uint16 | 2 | 저장된 Row 개수 |
+| 0 | **row_count** | uint16 | 2 | 저장된 Row 개수 |
 | 2 | **PageType** | uint8 | 1 | Leaf(0) 또는 Internal(1) |
 | 3 | **FreeSpace** | uint16 | 2 | 빈 공간의 시작 오프셋 |
 | 5 | **NextPageId** | uint32 | 4 | 다음 페이지 포인터 (Linked List) |
@@ -127,7 +127,7 @@ Table은 **물리적 저장소(Page/Pager)와 논리적 데이터(Row) 사이의
 Cursor는 **Iterator Pattern**의 구현체로, Table이 관리하는 Row 집합 위를 순회하는 상태 추적 객체입니다. "다음 Row로 이동(advance)", "현재 Row 반환(value)", "끝에 도달했는가(end_of_table)"와 같은 연산을 제공합니다.
 
 **책임:**
-- 현재 위치 추적 (`page_num`, `row_num`)
+- 현재 위치 추적 (`page_index`, `row_index`)
 - 순회 상태 관리 (`end_of_table`)
 - Table에게 Row 요청 위임
 
@@ -151,7 +151,7 @@ Pointer는 "여기 메모리 주소 0x1234"라고 말하는 정적인 주소이�
 - **Pager:** 파일 시스템과의 인터페이스. `read_page(n)`, `write_page(n)`을 통해 디스크 I/O를 추상화합니다.
 
 **책임:**
-- 파일 오프셋 계산 (`page_num * 4096`)
+- 파일 오프셋 계산 (`page_index * 4096`)
 - 디스크 읽기/쓰기 (`seek`, `read`, `write`, `flush`)
 - 페이지 캐싱 (미래 구현)
 
@@ -177,7 +177,7 @@ Row는 Python 객체를 C 호환 바이너리로 변환(`serialize`)하고, 바�
 table.execute_select()
 
 # 2. Table: Cursor 생성
-cursor = table.table_start()  # page_num=0, row_num=0
+cursor = table.table_start()  # page_index=0, row_index=0
 
 # 3. Cursor: 순회 시작
 while not cursor.end_of_table:
@@ -185,7 +185,7 @@ while not cursor.end_of_table:
     row = cursor.value()
 
     # 5. Table → Pager: "0번 Page를 로드해줘"
-    page = pager.read_page(cursor.page_num)
+    page = pager.read_page(cursor.page_index)
 
     # 6. Pager → Disk: seek(0 * 4096) + read(4096)
     # 7. Page → Row: deserialize(bytes)

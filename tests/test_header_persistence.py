@@ -10,8 +10,8 @@ def test_page_header():
         # 1. New Page Test
         print("1. Creating New Page...")
         p1 = Page()
-        if p1.num_rows != 0:
-            print(f"   ❌ Init fail. Expected 0 rows, got {p1.num_rows}")
+        if p1._row_count != 0:
+            print(f"   ❌ Init fail. Expected 0 rows, got {p1._row_count}")
             return
 
         # Check Header bytes (Should be 0x00000000)
@@ -23,14 +23,12 @@ def test_page_header():
         print("2. Inserting Row 1...")
         p1.insert(Row(1, "hdr_test", "hdr@test.com"))
 
-        if p1.num_rows != 1:
-            print(f"   ❌ num_rows not updated in memory.")
+        if p1._row_count != 1:
+            print(f"   ❌ row_count not updated in memory.")
             return
 
         # Check raw bytes for Header Update
-        # The first 4 bytes should be integer `1` (Big or Little endian)
-        # We assume Little endian (<I) as per Row class standard
-        # But user might implement arbitrary logic, so let's check basic persistence first.
+        # The first 2 bytes (H) should be integer `1` as per Page.HEADER_FORMAT
 
         # 3. Serialization/Deserialization Test
         print("3. Simulating Disk Save/Load...")
@@ -39,10 +37,10 @@ def test_page_header():
         # Load back
         p2 = Page(raw_bytes)  # This mocks reading from disk
 
-        if p2.num_rows != 1:
+        if p2._row_count != 1:
             print(f"   ❌ Header Persistence Failed!")
             print(f"      Original Page Rows: 1")
-            print(f"      Loaded Page Rows:   {p2.num_rows}")
+            print(f"      Loaded Page Rows:   {p2._row_count}")
             print(
                 "      Hint: Did you unpack the header in __init__? Did you update header in insert?"
             )
@@ -60,15 +58,13 @@ def test_page_header():
         # 4. Offset Shift Check
         # If offset is wrong, Row data will overlap with Header or be shifted.
         print("4. Checking Binary Layout...")
-        # Header (4 bytes) should not be empty now if num_rows=1
-        header_int = struct.unpack("<I", raw_bytes[0:4])[0]  # Try Little endian
-        if header_int != 1:
-            header_int_be = struct.unpack(">I", raw_bytes[0:4])[0]  # Try Big endian
-            if header_int_be != 1:
-                print(
-                    f"   ❌ Header bytes look wrong. Expected 1, got raw: {raw_bytes[0:4].hex()}"
-                )
-                return
+        # Header starts with 2-byte count (<H)
+        header_count = struct.unpack(Page.HEADER_FORMAT, raw_bytes[: Page.HEADER_SIZE])[
+            0
+        ]
+        if header_count != 1:
+            print(f"   ❌ Header bytes look wrong. Expected 1, got {header_count}")
+            return
         print("   ✅ Binary Header is correct.")
 
         print("\n🎉 Congratulations! Page Metadata is now Persistent.")

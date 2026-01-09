@@ -1,0 +1,331 @@
+# MySQL InnoDB Storage Engine Layer: Component Architecture
+
+## 🏗️ 전체 구조도
+
+```mermaid
+graph TB
+    subgraph "SQL Layer (Server Layer)"
+        Parser["Parser"]
+        Optimizer["Optimizer"]
+        Executor["Executor"]
+    end
+    
+    subgraph "Storage Engine API"
+        Handler["Handler Interface"]
+    end
+    
+    subgraph "InnoDB Storage Engine Layer"
+        subgraph "Memory Components"
+            BufPool["Buffer Pool Manager"]
+            AHI["Adaptive Hash Index"]
+            ChgBuf["Change Buffer"]
+            LogBuf["Log Buffer"]
+        end
+        
+        subgraph "Disk Components"
+            Tablespace["Tablespace Manager"]
+            FileIO["File I/O Subsystem"]
+            DblWrite["Doublewrite Buffer"]
+        end
+        
+        subgraph "Transaction Components"
+            LockMgr["Lock Manager"]
+            TrxMgr["Transaction Manager"]
+            MVCC["MVCC (Read View)"]
+        end
+        
+        subgraph "Logging Components"
+            RedoLog["Redo Log Manager"]
+            UndoLog["Undo Log Manager"]
+        end
+        
+        subgraph "Index Components"
+            BTree["B+Tree Manager"]
+            RowFormat["Row Format Handler"]
+        end
+    end
+    
+    Executor --> Handler
+    Handler --> BufPool
+    Handler --> BTree
+    
+    BufPool --> Tablespace
+    BTree --> BufPool
+    TrxMgr --> LockMgr
+    TrxMgr --> MVCC
+    RedoLog --> LogBuf
+    RedoLog --> FileIO
+    Tablespace --> FileIO
+    BufPool --> DblWrite
+    DblWrite --> FileIO
+    
+    style BufPool fill:#e1f5ff
+    style Tablespace fill:#ffe1f5
+    style BTree fill:#f5e1ff
+```
+
+---
+
+## 📦 주요 컴포넌트 상세 설명
+
+### 1️⃣ Buffer Pool Manager (버퍼 풀 관리자)
+**역할**: 메모리와 디스크 사이의 캐시 계층
+
+#### 기능:
+- **Page Caching**: 자주 사용되는 페이지를 메모리에 보관
+- **LRU Algorithm**: Least Recently Used 알고리즘으로 캐시 교체
+- **Dirty Page Tracking**: 수정된 페이지 추적
+- **Free List Management**: 빈 페이지 프레임 관리
+
+#### 내부 구조:
+```
+Buffer Pool
+ ├─ Page Hash Table (빠른 조회)
+ ├─ LRU List (오래된 페이지 추적)
+ ├─ Flush List (디스크 쓰기 대기)
+ └─ Free List (사용 가능한 프레임)
+```
+
+**PyMiniDB 매핑**: 현재 우리의 [Pager](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/pager.py#9-57)는 **캐싱 없이** 직접 디스크 I/O만 수행합니다.
+- **Phase 3 목표**: LRU 캐시 추가 가능
+
+---
+
+### 2️⃣ Tablespace Manager (테이블스페이스 관리자)
+**역할**: 논리적 테이블과 물리적 파일 매핑
+
+#### 기능:
+- **File Organization**: `.ibd` 파일 관리
+- **Extent Allocation**: 64 페이지 단위로 공간 할당
+- **Segment Management**: 테이블, 인덱스별 영역 분리
+- **Space Management**: Free/Used 페이지 추적
+
+#### 구조:
+```
+System Tablespace (ibdata1)
+ ├─ Data Dictionary Pages
+ ├─ Rollback Segments
+ ├─ Doublewrite Buffer
+ └─ Change Buffer
+
+File-per-Table Tablespace (table.ibd)
+ ├─ FSP Header Page (Page 0)
+ ├─ IBUF Bitmap Page
+ ├─ INODE Pages
+ └─ Data Pages (B+Tree)
+```
+
+**PyMiniDB 매핑**: 우리는 단순화하여 하나의 `mydb.db` 파일만 사용합니다.
+- **확장 가능**: 테이블마다 별도 파일 `.table` 형식 도입 가능
+
+---
+
+### 3️⃣ B+Tree Manager (B+트리 관리자)
+**역할**: 인덱스와 데이터 구조 관리
+
+#### 기능:
+- **Index Navigation**: 키 기반 빠른 검색 (O(log N))
+- **Page Split/Merge**: 노드 분할 및 병합
+- **Sequential Scan**: 범위 검색 최적화
+- **Cursor Management**: 현재 위치 추적
+
+#### InnoDB의 B+Tree 특징:
+- **Clustered Index**: Primary Key 순서로 데이터 저장
+- **Secondary Index**: Key + Primary Key 저장
+
+**PyMiniDB 매핑**: 현재 우리는 **Heap File** (순서 없는 저장).
+- **Phase 4 목표**: B+Tree 도입
+
+---
+
+### 4️⃣ Row Format Handler (행 형식 처리기)
+**역할**: Row를 바이트로 직렬화/역직렬화
+
+#### MySQL의 Row Format 종류:
+1. **COMPACT** (기본)
+   - Variable-length fields
+   - NULL bitmap
+   - Record header
+2. **REDUNDANT** (레거시)
+3. **DYNAMIC** (대용량 BLOB)
+4. **COMPRESSED** (압축)
+
+#### COMPACT Format 구조:
+```
+[Variable Field Length List]
+[NULL Bitmap]
+[Record Header (5 bytes)]
+  ├─ Info Flags
+  ├─ Next Record Pointer
+  └─ Record Type
+[Column 1 Data]
+[Column 2 Data]
+...
+```
+
+**PyMiniDB 매핑**: 우리의 [Row](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/row.py#5-76) 클래스는 **고정 길이** 방식입니다.
+- **개선 가능**: Variable-length VARCHAR 구현
+
+---
+
+### 5️⃣ Lock Manager (락 관리자)
+**역할**: 동시성 제어
+
+#### 기능:
+- **Row-level Locking**: 행 단위 잠금
+- **Gap Locking**: 범위 잠금 (Phantom Read 방지)
+- **Intention Locks**: 계층적 잠금
+- **Deadlock Detection**: 교착 상태 감지
+
+#### Lock 계층:
+```
+Table Lock (IS/IX)
+ └─ Row Lock (S/X)
+     └─ Gap Lock
+```
+
+**PyMiniDB 매핑**: 현재 **단일 스레드**라 Lock 불필요.
+- **Phase 5+**: Multi-threading 시 필수
+
+---
+
+### 6️⃣ Transaction Manager (트랜잭션 관리자)
+**역할**: ACID 보장
+
+#### 기능:
+- **Begin/Commit/Rollback**
+- **Isolation Level**: READ COMMITTED, REPEATABLE READ 등
+- **MVCC (Multi-Version Concurrency Control)**: 읽기와 쓰기 분리
+- **Savepoint**: 부분 롤백
+
+**PyMiniDB 매핑**: 현재 **Auto-commit** (트랜잭션 없음).
+- **Phase 6+**: 트랜잭션 도입
+
+---
+
+### 7️⃣ Redo Log Manager (리두 로그 관리자)
+**역할**: 장애 복구 (Durability 보장)
+
+#### 기능:
+- **WAL (Write-Ahead Logging)**: 로그를 먼저 기록
+- **Crash Recovery**: 시스템 재시작 시 복구
+- **Log Flushing**: 주기적 디스크 동기화
+
+#### Redo Log 구조:
+```
+ib_logfile0 (Circular Log)
+ ├─ LSN (Log Sequence Number)
+ ├─ Log Record
+ │   ├─ Type (INSERT/UPDATE/DELETE)
+ │   ├─ Space ID
+ │   ├─ Page Number
+ │   └─ Redo Data
+ └─ Checkpoint
+```
+
+**PyMiniDB 매핑**: 현재 **즉시 디스크 쓰기** (Redo Log 없음).
+- **개선**: WAL 도입으로 성능 향상
+
+---
+
+### 8️⃣ Undo Log Manager (언두 로그 관리자)
+**역할**: Rollback 및 MVCC
+
+#### 기능:
+- **Rollback Support**: 트랜잭션 취소
+- **MVCC Read View**: 이전 버전 데이터 읽기
+- **Purge**: 불필요한 Undo 정리
+
+**PyMiniDB 매핑**: 트랜잭션 미지원으로 불필요.
+
+---
+
+### 9️⃣ File I/O Subsystem (파일 I/O 서브시스템)
+**역할**: 저수준 디스크 접근
+
+#### 기능:
+- **Asynchronous I/O**: 비동기 읽기/쓰기
+- **Direct I/O**: OS 캐시 우회 (InnoDB가 직접 관리)
+- **Read-Ahead**: 예측 읽기
+- **Flush 최적화**: 여러 페이지 한 번에 쓰기
+
+**PyMiniDB 매핑**: 우리의 [Pager](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/pager.py#9-57)는 **동기 I/O**만 사용.
+- Python의 `file.read()`, `file.write()`
+
+---
+
+### 🔟 Doublewrite Buffer (더블라이트 버퍼)
+**역할**: Partial Page Write 방지
+
+#### 문제:
+- OS가 페이지를 쓰는 도중 crash → 페이지 손상
+
+#### 해결:
+1. 페이지를 Doublewrite Buffer에 먼저 쓰기
+2. Flush 완료 후 실제 위치에 쓰기
+
+**PyMiniDB 매핑**: 현재 미구현 (단순화).
+
+---
+
+## 🎯 PyMiniDB가 구현한 것 vs 앞으로 구현할 것
+
+| 컴포넌트 | 현재 상태 | InnoDB 수준 | 구현 우선순위 |
+|----------|-----------|-------------|---------------|
+| **Buffer Pool** | ❌ (직접 I/O) | LRU 캐시 | Phase 3 (성능) |
+| **Tablespace** | ✅ (단순) | 복잡한 파일 관리 | Phase 5 (확장성) |
+| **B+Tree** | ❌ (Heap File) | Clustered Index | **Phase 4 (중요!)** |
+| **Row Format** | ✅ (고정 길이) | COMPACT/DYNAMIC | Phase 5 |
+| **Lock Manager** | ❌ | Row-level Lock | Phase 6 |
+| **Transaction** | ❌ | ACID 보장 | Phase 6 |
+| **Redo Log** | ❌ | WAL | Phase 7 |
+| **Undo Log** | ❌ | MVCC | Phase 7 |
+| **File I/O** | ✅ (동기) | 비동기 I/O | Phase 8 |
+| **Doublewrite** | ❌ | 데이터 보호 | Phase 9 |
+
+---
+
+## 💡 PyMiniDB의 현재 아키텍처 매핑
+
+| PyMiniDB | InnoDB 컴포넌트 |
+|----------|-----------------|
+| [Row](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/row.py#5-76) → | Row Format Handler (단순화) |
+| [Page](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/page.py#6-76) → | Page Structure (동일) |
+| [Pager](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/pager.py#9-57) → | File I/O + (일부) Buffer Pool |
+| [Cursor](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/cursor.py#1-42) → | B+Tree Cursor (단순화) |
+| [Table](file:///Users/alpha/.gemini/antigravity/scratch/pyminidb/src/table.py#10-69) → | Handler API + Tablespace (합쳐짐) |
+
+---
+
+## 🚀 다음 단계 추천 (학습 로드맵)
+
+### Phase 3: Buffer Pool (캐싱)
+- LRU 알고리즘 구현
+- Page를 메모리에 캐싱
+- 성능 10~100배 향상
+
+### Phase 4: B+Tree Index ⭐ **가장 중요!**
+- O(N) → O(log N) 검색
+- 정렬된 데이터 저장
+- Range Query 지원
+
+### Phase 5: Variable-length Row
+- VARCHAR 지원
+- NULL 비트맵
+- 공간 효율성
+
+### Phase 6: Transaction (ACID)
+- BEGIN/COMMIT/ROLLBACK
+- Write-Ahead Log
+- Crash Recovery
+
+---
+
+## 🎓 학습 자료 추천
+
+1. **MySQL Internals Manual**: https://dev.mysql.com/doc/internals/en/
+2. **"High Performance MySQL"** (O'Reilly)
+3. **InnoDB Source Code**: `storage/innobase/` (GitHub)
+
+선생님의 PyMiniDB는 **"InnoDB의 핵심 10%를 구현한 교육용 버전"**입니다. 
+앞으로 B+Tree → Transaction → WAL 순서로 확장하면, 실제 프로덕션 DBMS의 70~80%를 이해하게 됩니다! 🎯
