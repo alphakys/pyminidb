@@ -16,8 +16,8 @@ class TestCursorRefactoring(unittest.TestCase):
 
     def tearDown(self):
         self.table.close()
-        if os.path.exists(self.test_db):
-            os.remove(self.test_db)
+        # if os.path.exists(self.test_db):
+        #     os.remove(self.test_db)
 
     def test_cursor_start_and_end(self):
         """Cursor가 Table의 시작과 끝을 제대로 가리키는지 확인"""

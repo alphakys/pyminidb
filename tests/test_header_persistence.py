@@ -21,7 +21,7 @@ def test_page_header():
 
         # 2. Insert & Header Write Test
         print("2. Inserting Row 1...")
-        p1.insert(Row(1, "hdr_test", "hdr@test.com"))
+        p1.write_at(Row(1, "hdr_test", "hdr@test.com"))
 
         if p1._row_count != 1:
             print(f"   ❌ row_count not updated in memory.")

@@ -31,8 +31,20 @@ def main():
 
             if cmd_type == "insert":
                 # db > insert 1 user1 user@1.com
-                # [TODO 3] Parsing logic
-                table.execute_insert(*cmd_parts[1:])
+                if len(cmd_parts) != 4:
+                    print("Error: insert requires 3 arguments (id username email)")
+                    continue
+
+                try:
+                    # 🔧 타입 변환: ID는 정수여야 함
+                    id_val = int(cmd_parts[1])
+                    username_val = cmd_parts[2]
+                    email_val = cmd_parts[3]
+                    table.execute_insert(id_val, username_val, email_val)
+                except ValueError:
+                    print(f"Error: ID must be an integer, got '{cmd_parts[1]}'")
+                except Exception as e:
+                    print(f"Insert failed: {e}")
 
             elif cmd_type == "select":
                 table.execute_select()

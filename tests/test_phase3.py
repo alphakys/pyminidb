@@ -28,7 +28,7 @@ def test_pager_persistence():
         print("2. Writing Page 0...")
         p0 = Page()
         row = Row(1, "persist_user", "persist@db.com")
-        p0.insert(row)
+        p0.write_at(row)
 
         pager.write_page(0, p0)
         # Check file size (should be at least 4KB)
@@ -68,7 +68,7 @@ def test_pager_persistence():
         print("5. Testing Random Page Access (Page 1)...")
         pager3 = Pager(DB_FILE)
         p1 = Page()
-        p1.insert(Row(99, "page1_user", "p1@db.com"))
+        p1.write_at(Row(99, "page1_user", "p1@db.com"))
 
         # Write to Page 1 (Offset 4096)
         pager3.write_page(1, p1)

@@ -54,9 +54,7 @@ class Cursor:
             row_index=92  → (1, 0)   # Page 1, Cell 0 (경계 넘김!)
             row_index=184 → (2, 0)   # Page 2, Cell 0
         """
-        page_index = self.row_index // Page.MAX_ROWS
-        cell_index = self.row_index % Page.MAX_ROWS
-        return page_index, cell_index
+        return (self.row_index // Page.MAX_ROWS, self.row_index % Page.MAX_ROWS)
 
     def current_cell(self) -> Row:
         """
@@ -77,7 +75,12 @@ class Cursor:
             - 이 메서드가 호출될 때 Page가 로드됨 (Lazy Loading)
             - Pager가 캐싱을 지원하면 성능 향상
         """
-        pass  # TODO: 구현 필요
+        if self.end_of_table:
+            raise RuntimeError("End of Table")
+
+        page_idx, cell_idx = self._get_page_location()
+        curr_page = self.table.pager.read_page(page_index=page_idx)
+        return curr_page.read_at(row_index=cell_idx)
 
     def advance(self):
         """
@@ -112,4 +115,13 @@ class Cursor:
             - Table.row_count가 정확히 관리되면 Page가 꽉 차는 일 없음
             - row_index = table.row_count일 때 호출됨 (끝에 추가)
         """
-        pass  # TODO: 구현 필요
+        page_idx = self._get_page_location()[0]
+        curr_page = self.table.pager.read_page(page_index=page_idx)
+        print(row)
+        if curr_page.is_full():
+            raise RuntimeError(f"Page {page_idx} is full! This should not happen.")
+
+        curr_page.write_at(row=row)
+        self.table.pager.write_page(page_index=page_idx, page=curr_page)
+        self.table.row_count += 1
+        self.row_index += 1

@@ -42,11 +42,15 @@ class Table:
         self.pager = Pager(filename)
         file_size = os.path.getsize(filename=filename)
         self.page_count = file_size // Page.PAGE_SIZE
-        self.last_page_index = self.page_count - 1
-        # 테이블에 존재하는 모든 row의 총 개수
-        self.row_count = ((self.page_count - 1) * Page.MAX_ROWS) + self.pager.read_page(
-            self.last_page_index
-        ).row_count
+        if self.page_count == 0:
+            self.last_page_index = 0
+            self.row_count = 0
+        else:
+            self.last_page_index = self.page_count - 1
+            # 테이블에 존재하는 모든 row의 총 개수
+            self.row_count = (
+                (self.page_count - 1) * Page.MAX_ROWS
+            ) + self.pager.read_page(self.last_page_index).row_count
 
     def table_start(self) -> Cursor:
         """
@@ -106,8 +110,16 @@ class Table:
             table.execute_insert(1, "alice", "alice@test.com")
             # → Cursor가 알아서 올바른 Page에 저장
         """
-        page = self.pager.read_page()
-        pass  # TODO: 구현 필요
+        # 🔧 Row 객체 생성
+        row = Row(id, username, email)
+
+        # 끝 위치 Cursor 생성
+        end_cell = self.table_end()
+
+        # Row 저장 (Cursor.save가 row_count 증가 처리)
+        end_cell.save(row)
+
+        return True
 
     def execute_select(self):
         """
@@ -127,7 +139,10 @@ class Table:
             table.execute_select()
             # → 모든 Row 출력 (여러 Page 자동 순회)
         """
-        pass  # TODO: 구현 필요
+        cur = self.table_start()
+        while not cur.end_of_table:
+            print(cur.current_cell())
+            cur.advance()
 
     def close(self):
         """
@@ -137,8 +152,3 @@ class Table:
             - Pager.close() 호출하여 파일 핸들 닫기
         """
         self.pager.close()
-
-
-if __name__ == "__main__":
-    t = Table()
-    print(t.row_count)

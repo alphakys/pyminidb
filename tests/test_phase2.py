@@ -21,7 +21,7 @@ def test_page_abstraction():
         # 2. Insert Test
         print("2. Testing Insert...")
         row1 = Row(1, "user1", "user1@test.com")
-        if not p.insert(row1):
+        if not p.write_at(row1):
             print("   ❌ Insert failed.")
             return
 
@@ -45,7 +45,7 @@ def test_page_abstraction():
         # We already have 1 row. Let's fill the rest.
         for i in range(2, Page.MAX_ROWS + 1):
             r = Row(i, f"user{i}", f"user{i}@test.com")
-            success = p.insert(r)
+            success = p.write_at(r)
             if not success:
                 print(f"   ❌ Prematurely full at count {i - 1}")
                 return

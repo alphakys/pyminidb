@@ -30,9 +30,12 @@ class Page:
     def __init__(self, raw_data: bytes = None):
         if raw_data:
             self.data: bytearray = bytearray(raw_data)
-            self._row_count = self.header_struct.unpack(self.data[: Page.HEADER_SIZE])[
-                0
-            ]
+            # 🔧 Header 전체 언팩 (4개 필드 모두)
+            header_values = self.header_struct.unpack(self.data[: Page.HEADER_SIZE])
+            self._row_count = header_values[0]
+            self._page_type = header_values[1]
+            self._free_space = header_values[2]
+            self._next_page_id = header_values[3]
         else:
             self.data: bytearray = bytearray(Page.PAGE_SIZE)
             self._row_count = 0
@@ -59,7 +62,7 @@ class Page:
     def is_full(self) -> bool:
         return True if self._row_count >= Page.MAX_ROWS else False
 
-    def insert(self, row: Row) -> bool:
+    def write_at(self, row: Row) -> bool:
         """
         [TODO 3] Offset 계산 공식 수정
         Row가 저장될 위치는 이제 0이 아니라 4(HEADER_SIZE)부터 시작합니다.
