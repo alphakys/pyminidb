@@ -24,12 +24,6 @@ class BPlusNode:
     values: Optional[List] = None
     next: Optional["BPlusNode"] = None
 
-    is_leaf: bool
-    keys: List[int] = field(default_factory=list)
-    children: Optional[List["BPlusNode"]]
-    values: Optional[List]
-    next: Optional["BPlusNode"]
-
 
 def print_tree(node: BPlusNode, level: int = 0):
     """트리 시각화"""
@@ -43,7 +37,7 @@ def print_tree(node: BPlusNode, level: int = 0):
 
 
 # ======================================================================
-# Task 2.1.1: Order=3 B+Tree 수동 구축 (키: 1, 3, 5, 7, 9, 11, 13, 15)
+# Task 2.1.1: Order=3 B+Tree 수동 구축
 # ======================================================================
 
 
@@ -51,17 +45,17 @@ def build_static_tree_order3():
     """
     Order=3 B+Tree 구축 (최대 3개 자식, 최대 2개 키)
 
-    목표 구조:
-            [7]              ← Root (Internal)
-           /   \
-        [1,3,5] [7,9,11,13,15] ← 아니다! Order=3이면 Leaf도 최대 2개 키!
+    [설정]
+    - Order: 3
+    - 최대 키 개수: 2 (Order - 1)
+    - 키 목록: [1, 3, 5, 7, 9, 11] (6개)
 
-    올바른 구조:
-            [5, 11]           ← Root (Internal)
+    [목표 구조]
+            [5, 9]           ← Root (2개 키, 3개 자식)
            /   |   \
-        [1,3] [5,7,9] [11,13,15] ← Leaves
+        [1,3] [5,7] [9,11]  ← 3 Leaves (각 2개 키)
 
-    작업 순서:
+    [작업 순서]
     1. Leaf 3개 만들기
     2. Sibling 연결
     3. Root (Internal) 만들기
@@ -71,40 +65,46 @@ def build_static_tree_order3():
     print("=" * 60)
 
     ORDER = 3
-    MAX_KEYS_PER_NODE = ORDER - 1  # 2개
+    MAX_KEYS = ORDER - 1  # 2개
 
-    print(f"\n[설정] Order={ORDER}, 최대 {MAX_KEYS_PER_NODE}개 키/노드")
-    print("[키 리스트] 1, 3, 5, 7, 9, 11, 13, 15 (총 8개)\n")
+    print(f"\n[설정] Order={ORDER}, 최대 {MAX_KEYS}개 키/노드")
+    print("[키 리스트] 1, 3, 5, 7, 9, 11 (총 6개)\n")
 
+    # ----------------------------------------------------------------
     # Step 1: Leaf 노드들 생성
-    print("Step 1: Leaf 노드 생성 (Bottom Layer)")
+    # ----------------------------------------------------------------
+    print("Step 1: Leaf 노드 생성")
 
-    # TODO: 여기에 코드를 작성하세요!
-    # 힌트:
-    # - Leaf는 최대 2개 키를 가질 수 있음
-    # - 8개 키를 3개 Leaf에 나눠 담기
-    # - 각 Leaf는 is_leaf=True, values도 설정
+    # TODO: 아래 코드를 완성하세요
+    leaf1 = BPlusNode(is_leaf=True, keys=[1, 3], values=["1", "3"])  # keys=[1, 3]
+    leaf2 = BPlusNode(is_leaf=True, keys=[5, 7], values=["1", "3"])  # keys=[5, 7]
+    leaf3 = BPlusNode(is_leaf=True, keys=[9, 11], values=["1", "3"])  # keys=[9, 11]
 
-    leaf1 = None  # [1, 3]
-    leaf2 = None  # [5, 7, 9] ← 3개? Order 위반!
-    leaf3 = None  # [11, 13, 15]
-
+    # ----------------------------------------------------------------
     # Step 2: Sibling 포인터 연결
-    print("Step 2: Sibling 포인터 연결 (Linked List)")
+    # ----------------------------------------------------------------
+    print("Step 2: Sibling 포인터 연결")
 
-    # TODO: leaf1.next = ? 형식으로 연결
+    leaf1.next = leaf2
+    leaf2.next = leaf3
 
+    # ----------------------------------------------------------------
     # Step 3: Root (Internal) 생성
-    print("Step 3: Root 노드 생성 (Index Layer)")
+    # ----------------------------------------------------------------
+    print("Step 3: Root 노드 생성")
 
-    # TODO: Internal 노드 생성
-    # 힌트:
-    # - keys는 각 구간의 "시작점"
-    # - children은 [leaf1, leaf2, leaf3]
+    # TODO: Root의 keys는? children은?
+    # 힌트: keys=[5, 9]면 구간이 어떻게 나뉘는지 생각해보세요
+    #   child[0]: key < 5
+    #   child[1]: 5 ≤ key < 9
+    #   child[2]: key ≥ 9
+    root = BPlusNode(
+        is_leaf=False, keys=[5, 9], children=[leaf1, leaf2, leaf3], values=["1", "3"]
+    )
 
-    root = None
-
-    # 검증
+    # ----------------------------------------------------------------
+    # 결과 출력
+    # ----------------------------------------------------------------
     if root:
         print("\n[완성된 트리]")
         print_tree(root)
@@ -115,7 +115,7 @@ def build_static_tree_order3():
 
 
 # ======================================================================
-# Task 2.1.2: Order=4 B+Tree 수동 구축 (더 복잡한 예제)
+# Task 2.1.2: Order=4 B+Tree 수동 구축 (도전 과제)
 # ======================================================================
 
 
@@ -123,43 +123,45 @@ def build_static_tree_order4():
     """
     Order=4 B+Tree 구축 (최대 4개 자식, 최대 3개 키)
 
-    키: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 (총 12개)
+    [설정]
+    - Order: 4
+    - 최대 키 개수: 3 (Order - 1)
+    - 키 목록: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] (12개)
 
-    목표 구조:
-              [4, 8]                    ← Root
-             /   |   \
-        [1,2,3] [4,5,6,7] [8,9,10,11,12] ← Leaves (5개는 Order 위반!)
+    [목표 구조]
+            [4, 7, 10]              ← Root (3개 키, 4개 자식)
+           /   |   |   \
+        [1,2,3] [4,5,6] [7,8,9] [10,11,12] ← 4 Leaves (각 3개 키)
 
-    올바른 구조:
-              [4, 7, 10]                ← Root
-             /   |   |   \
-        [1,2,3] [4,5,6] [7,8,9] [10,11,12] ← 4개 Leaves
-
-    도전 과제! 스스로 구축해보세요.
+    [검증]
+    - 각 Leaf: 3개 키 ≤ MAX_KEYS(3) ✅
+    - Root: 3개 키, 4개 자식 ≤ Order(4) ✅
     """
     print("\n" + "=" * 60)
     print("Task 2.1.2: Order=4 B+Tree 구축 (도전 과제)")
     print("=" * 60)
 
     ORDER = 4
-    MAX_KEYS_PER_NODE = ORDER - 1  # 3개
+    MAX_KEYS = ORDER - 1  # 3개
 
-    print(f"\n[설정] Order={ORDER}, 최대 {MAX_KEYS_PER_NODE}개 키/노드")
+    print(f"\n[설정] Order={ORDER}, 최대 {MAX_KEYS}개 키/노드")
     print("[키 리스트] 1~12 (총 12개)\n")
 
-    # TODO: 여기에 코드를 작성하세요!
-    # 4개 Leaf를 만들고, Sibling 연결하고, Root 만들기
+    # TODO: 4개 Leaf 만들기
+    leaf1 = BPlusNode(is_leaf=True, keys=[1, 2, 3], values=[1, 2, 3])  # [1, 2, 3]
+    leaf2 = BPlusNode(is_leaf=True, keys=[4, 5, 6], values=[1, 2, 3])  # [4, 5, 6]
+    leaf3 = BPlusNode(is_leaf=True, keys=[7, 8, 9], values=[1, 2, 3])  # [7, 8, 9]
+    leaf4 = BPlusNode(is_leaf=True, keys=[10, 11, 12], values=[1, 2, 3])  # [10, 11, 12]
 
-    leaf1 = BPlusNode(is_leaf=True, keys=[1, 2, 3], values=["a", "b", "c"])
-    leaf2 = None  # [4, 5, 6]
-    leaf3 = None  # [7, 8, 9]
-    leaf4 = None  # [10, 11, 12]
+    # TODO: Sibling 연결
+    leaf1.next = leaf2
+    leaf2.next = leaf3
+    leaf3.next = leaf4
 
-    # Sibling 연결
-    # TODO
-
-    # Root
-    root = None  # keys=[4, 7, 10], children=[leaf1, leaf2, leaf3, leaf4]
+    # TODO: Root 만들기
+    root = BPlusNode(
+        is_leaf=False, children=[leaf1, leaf2, leaf3, leaf4], keys=[4, 7, 10]
+    )
 
     if root:
         print("[완성된 트리]")
@@ -171,20 +173,12 @@ def build_static_tree_order4():
 
 
 # ======================================================================
-# Task 2.1.3: 트리 검증 함수
+# 검증 함수
 # ======================================================================
 
 
 def validate_tree(node: BPlusNode, order: int) -> bool:
-    """
-    B+Tree가 올바르게 구축되었는지 검증
-
-    검증 항목:
-    1. 키가 정렬되어 있는가?
-    2. Order 제약을 지키는가? (최대 order-1개 키)
-    3. Leaf의 Sibling이 연결되어 있는가?
-    4. Internal의 children 개수가 keys+1인가?
-    """
+    """B+Tree가 올바르게 구축되었는지 검증"""
     MAX_KEYS = order - 1
 
     # 1. 키 정렬 확인
@@ -199,7 +193,6 @@ def validate_tree(node: BPlusNode, order: int) -> bool:
 
     # 3. Leaf vs Internal 검증
     if node.is_leaf:
-        # Leaf: values 있어야 함
         if node.values is None:
             print(f"❌ Leaf에 values 없음")
             return False
@@ -207,7 +200,6 @@ def validate_tree(node: BPlusNode, order: int) -> bool:
             print(f"❌ keys와 values 개수 불일치")
             return False
     else:
-        # Internal: children 있어야 함
         if node.children is None:
             print(f"❌ Internal에 children 없음")
             return False
@@ -216,8 +208,6 @@ def validate_tree(node: BPlusNode, order: int) -> bool:
                 f"❌ children 개수 오류: {len(node.children)} != {len(node.keys) + 1}"
             )
             return False
-
-        # 재귀적으로 children 검증
         for child in node.children:
             if not validate_tree(child, order):
                 return False
@@ -226,7 +216,42 @@ def validate_tree(node: BPlusNode, order: int) -> bool:
 
 
 # ======================================================================
-# 테스트 실행
+# 참고 정답 (학습용)
+# ======================================================================
+
+
+def solution_order3():
+    """Order=3 정답 예시"""
+    leaf1 = BPlusNode(is_leaf=True, keys=[1, 3], values=["v1", "v3"])
+    leaf2 = BPlusNode(is_leaf=True, keys=[5, 7], values=["v5", "v7"])
+    leaf3 = BPlusNode(is_leaf=True, keys=[9, 11], values=["v9", "v11"])
+
+    leaf1.next = leaf2
+    leaf2.next = leaf3
+
+    root = BPlusNode(is_leaf=False, keys=[5, 9], children=[leaf1, leaf2, leaf3])
+    return root
+
+
+def solution_order4():
+    """Order=4 정답 예시"""
+    leaf1 = BPlusNode(is_leaf=True, keys=[1, 2, 3], values=["v1", "v2", "v3"])
+    leaf2 = BPlusNode(is_leaf=True, keys=[4, 5, 6], values=["v4", "v5", "v6"])
+    leaf3 = BPlusNode(is_leaf=True, keys=[7, 8, 9], values=["v7", "v8", "v9"])
+    leaf4 = BPlusNode(is_leaf=True, keys=[10, 11, 12], values=["v10", "v11", "v12"])
+
+    leaf1.next = leaf2
+    leaf2.next = leaf3
+    leaf3.next = leaf4
+
+    root = BPlusNode(
+        is_leaf=False, keys=[4, 7, 10], children=[leaf1, leaf2, leaf3, leaf4]
+    )
+    return root
+
+
+# ======================================================================
+# 메인 실행
 # ======================================================================
 
 if __name__ == "__main__":
@@ -250,6 +275,7 @@ if __name__ == "__main__":
         else:
             print("❌ 트리 구조에 오류가 있습니다.")
 
+    # 정답 확인용
     print("\n" + "=" * 60)
-    print("완료 후 다음 단계: Level 2.2 - Search 알고리즘")
+    print("📝 참고: 정답을 보려면 solution_order3(), solution_order4() 호출")
     print("=" * 60)
