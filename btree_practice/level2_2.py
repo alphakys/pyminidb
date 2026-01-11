@@ -116,7 +116,6 @@ def find_leaf(root: BPlusNode, key: int) -> BPlusNode:
         # bisect_right 함수는 keys list에서 order를 구해주는 역할을 한다.
         # index에 해당하는 children으로 pointer 이동 후 동일한 로직의 연산을 반복한다.
         index = bisect.bisect_right(node.keys, key)
-
         # TODO: 다음 노드로 이동
         node = node.children[index]
 
@@ -147,15 +146,13 @@ def search(root: BPlusNode, key: int) -> Optional[str]:
     TODO: 아래 코드를 완성하세요!
     """
     # Step 1: Leaf 찾기
-    leaf = find_leaf(root, key)  # TODO: find_leaf 호출
+    leaf = find_leaf(root, key)
 
     # Step 2: Leaf에서 키 찾기
     if key in leaf.keys:
-        # TODO: key의 index 찾고 values 반환
         index = leaf.keys.index(key)
         return leaf.values[index]
     else:
-        print("TEST : ", leaf.keys)
         return None
 
 
@@ -230,8 +227,11 @@ if __name__ == "__main__":
         try:
             result = search(root, key)
             status = "✅" if result == expected else "❌"
+            # None을 문자열로 변환하여 포맷 에러 방지
+            result_str = str(result) if result is not None else "None"
+            expected_str = str(expected) if expected is not None else "None"
             print(
-                f"{status} search({key:2d}) = {result:10s} (예상: {str(expected):10s})"
+                f"{status} search({key:2d}) = {result_str:10s} (예상: {expected_str:10s})"
             )
         except (AttributeError, TypeError) as e:
             print(f"⚠️  search({key:2d}) - 아직 구현되지 않았습니다")
