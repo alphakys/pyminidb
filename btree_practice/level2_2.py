@@ -148,12 +148,13 @@ def search(root: BPlusNode, key: int) -> Optional[str]:
     # Step 1: Leaf 찾기
     leaf = find_leaf(root, key)
 
-    # Step 2: Leaf에서 키 찾기
     if key in leaf.keys:
-        index = leaf.keys.index(key)
-        return leaf.values[index]
+        result = leaf.values[leaf.keys.index(key)]
+
     else:
-        return None
+        result = None
+
+    return result
 
 
 # ======================================================================
@@ -234,6 +235,7 @@ if __name__ == "__main__":
                 f"{status} search({key:2d}) = {result_str:10s} (예상: {expected_str:10s})"
             )
         except (AttributeError, TypeError) as e:
+            print(e)
             print(f"⚠️  search({key:2d}) - 아직 구현되지 않았습니다")
             break
 

@@ -56,17 +56,17 @@ def print_tree(node: BPlusNode, level: int = 0):
     2. node.keys를 출력 (예: [1, 3, 5])
     3. node.is_leaf가 False면 children도 재귀적으로 출력
     """
-    # 여기에 코드를 작성하세요!
-    indent = "  " * level
 
-    if node.is_leaf:
-        print(f"{indent}{node.keys}")
-        return
-    else:
-        print(f"{indent}{node.keys}")
-    for n in node.children:
-        # print(f"Children List의 {n}번째 node \n{n}")
-        print_tree(n, level=level + 1)
+    # 예상 출력:
+    # [5]
+    #   [1, 3]
+    #   [5, 7]
+
+    indent = "  " * level
+    print(f"{indent} {node.keys}")
+    if not node.is_leaf:
+        for n in node.children:
+            print_tree(n, level + 1)
 
 
 # ======================================================================

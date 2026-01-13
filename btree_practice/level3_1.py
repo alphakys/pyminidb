@@ -90,29 +90,15 @@ def insert_into_leaf(leaf: BPlusNode, key: int, value: str, max_keys: int) -> No
     TODO: 아래 코드를 완성하세요!
     """
     # Step 1: 꽉 찼는지 확인
-    if len(leaf.keys) >= max_keys:
-        raise Exception(f"Leaf is full! (TODO: implement split)")
+    if len(leaf.keys) == max_keys:
+        raise RuntimeError("Leaf node is full")
 
-    # Step 2: 삽입 위치 찾기
-    # 힌트: bisect.bisect_left(leaf.keys, key)
-    # bisect_left는 "같은 값이 있으면 왼쪽"
-    index = bisect.bisect_right(leaf.keys, key)
+    insert_index = bisect.bisect_right(leaf.keys, key)
 
-    # Step 3: 정렬된 위치에 삽입
-    # 힌트: list.insert(index, item)
-    # TODO: leaf.keys에 key 삽입
-    # TODO: leaf.values에 value 삽입
+    leaf.keys.insert(insert_index, key)
+    leaf.values.insert(insert_index, value)
 
-    if index == max_keys:
-        leaf.keys.append(key)
-        leaf.values.append(value)
-    else:
-        tmp_key: int = leaf.keys[index]
-        tmp_val: str = leaf.values[index]
-        leaf.keys[index] = key
-        leaf.keys.append(tmp_key)
-        leaf.values[index] = value
-        leaf.values.append(tmp_val)
+    return None
 
 
 # ======================================================================
@@ -140,12 +126,11 @@ def insert(root: BPlusNode, key: int, value: str, max_keys: int) -> None:
 
     TODO: 아래 코드를 완성하세요!
     """
-    # Step 1: Leaf 찾기
     leaf = find_leaf(root, key)
 
-    # Step 2: Leaf에 삽입
-    # TODO: insert_into_leaf 호출
-    insert_into_leaf(leaf=leaf, key=key, value=value, max_keys=max_keys)
+    insert_into_leaf(leaf, key=key, value=value, max_keys=max_keys)
+
+    return None
 
 
 # ======================================================================

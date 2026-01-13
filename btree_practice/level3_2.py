@@ -17,6 +17,20 @@ from typing import List, Optional, Tuple
 import bisect
 
 
+"""
+
+Insert (7)
+🌳 [5, 10]
+  🍃 [3] [5, 7]
+  🍃 [10, 15]
+
+[3,5,7]
+   [5]
+[3]  [5,7]
+
+"""
+
+
 @dataclass
 class BPlusNode:
     is_leaf: bool
@@ -78,25 +92,29 @@ def split_leaf(leaf: BPlusNode) -> Tuple[int, BPlusNode]:
 
     TODO: 아래 코드를 완성하세요!
     """
+
     # Step 1: 중간 지점 계산
     mid = len(leaf.keys) // 2
+
+    # Step 5: promote_key 계산
+    # TODO: promote_key = ?
+    promote_key = leaf.keys[mid]
 
     # Step 2: 오른쪽 절반으로 new_leaf 생성
     # TODO: new_leaf를 만드세요
     # 힌트: keys와 values를 슬라이싱 [mid:]
-    new_leaf = None
+    new_leaf = BPlusNode(is_leaf=True, keys=leaf.keys[mid:], values=leaf.values[mid:])
 
     # Step 3: 왼쪽 절반만 남기도록 기존 leaf 축소
     # TODO: leaf.keys = ?
     # TODO: leaf.values = ?
+    leaf.keys = leaf.keys[:mid]
+    leaf.values = leaf.values[:mid]
 
     # Step 4: Sibling 포인터 재연결
     # TODO: new_leaf.next = ?
     # TODO: leaf.next = ?
-
-    # Step 5: promote_key 계산
-    # TODO: promote_key = ?
-    promote_key = None
+    leaf.next = new_leaf
 
     return promote_key, new_leaf
 
@@ -139,15 +157,17 @@ def insert_into_parent(
     TODO: 아래 코드를 완성하세요!
     """
     # Step 1: 삽입 위치 찾기
-    index = None  # TODO: bisect 사용
+    index = bisect.bisect_right(parent.keys, promote_key)  # TODO: bisect 사용
 
     # Step 2: keys 삽입
     # TODO
+    parent.keys.insert(index, promote_key)
 
     # Step 3: children 삽입 (index+1)
     # TODO
+    parent.children.insert(index + 1, new_child)
 
-    pass
+    return None
 
 
 # ======================================================================
@@ -189,7 +209,7 @@ def insert_with_split(
         parent = None
     else:
         # TODO: find_leaf 사용
-        leaf = None
+        leaf = find_leaf(root, key)
         parent = root  # 간단히 Root를 Parent로 가정
 
     # Step 2: Leaf에 삽입 (넘쳐도 OK)
@@ -211,7 +231,9 @@ def insert_with_split(
             print("  → 새 Root 생성")
             # TODO: 새 Internal Root 만들기
             # 힌트: keys=[promote_key], children=[leaf, new_leaf]
-            new_root = None
+            new_root = BPlusNode(
+                is_leaf=False, keys=[promote_key], children=[leaf, new_leaf]
+            )
             return new_root
         else:
             # Parent에 promote_key 삽입
