@@ -1,6 +1,15 @@
 from src.row import Row
-from typing import ClassVar, Optional
+from src.node import BTreeNode
+from typing import ClassVar, Optional, Tuple, List
+from enum import IntEnum
 import struct
+
+
+class PageType(IntEnum):
+    """Page 타입 구분"""
+
+    LEAF = 1  # Data Page (Row 저장)
+    INTERNAL = 2  # Index Page (keys + child PIDs)
 
 
 class Page:
@@ -27,19 +36,24 @@ class Page:
     HEADER_SIZE: ClassVar[int] = 9
     header_struct: ClassVar[struct.Struct] = struct.Struct(HEADER_FORMAT)
 
-    def __init__(self, raw_data: bytes = None):
+    def __init__(self, raw_data: bytes = None, page_type: PageType = PageType.LEAF):
+        """
+        Args:
+            raw_data: 디스크에서 읽어온 바이트 (없으면 새 페이지)
+            page_type: Leaf 또는 Internal (기본값: Leaf)
+        """
         if raw_data:
             self.data: bytearray = bytearray(raw_data)
             # 🔧 Header 전체 언팩 (4개 필드 모두)
             header_values = self.header_struct.unpack(self.data[: Page.HEADER_SIZE])
             self._row_count = header_values[0]
-            self._page_type = header_values[1]
+            self._page_type = PageType(header_values[1])  # Enum으로 변환
             self._free_space = header_values[2]
             self._next_page_id = header_values[3]
         else:
             self.data: bytearray = bytearray(Page.PAGE_SIZE)
             self._row_count = 0
-            self._page_type = 0
+            self._page_type = page_type  # 생성 시 타입 지정
             self._free_space = 0
             self._next_page_id = 0
 
@@ -49,6 +63,16 @@ class Page:
         Row의 개수가 몇개 인지 반환
         """
         return self._row_count
+
+    @property
+    def is_leaf(self) -> bool:
+        """이 페이지가 Leaf인지 확인"""
+        return self._page_type == PageType.LEAF
+
+    @property
+    def page_type(self) -> PageType:
+        """페이지 타입 반환"""
+        return self._page_type
 
     def _update_header(self):
         """
@@ -85,3 +109,27 @@ class Page:
         end = offset + Page.ROW_SIZE
         raw_data = self.data[offset:end]
         return Row.deserialize(raw_data)
+
+    def read_internal_node(self) -> Tuple[List[int], List[int]]:
+        """
+        Internal Page에서 keys, pids 읽기
+        """
+        if not self.is_leaf:
+            # Header(9 bytes) 이후부터 읽기
+            return BTreeNode.deserialize_internal(self.data[Page.HEADER_SIZE :])
+        raise TypeError("Not an Internal page")
+
+    def write_internal_node(self, keys: List[int], pids: List[int]):
+        """
+        Internal Page에 keys, pids 쓰기
+        """
+        if not self.is_leaf:
+            body = BTreeNode.serialize_internal(keys, pids)
+            # Header(9 bytes) 이후에 덮어쓰기
+            self.data[Page.HEADER_SIZE : Page.HEADER_SIZE + len(body)] = body
+
+            # RowCount는 Key 개수로 사용
+            self._row_count = len(keys)
+            self._update_header()
+        else:
+            raise TypeError("Not an Internal page")

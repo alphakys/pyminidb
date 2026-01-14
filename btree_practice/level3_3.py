@@ -88,10 +88,15 @@ def split_internal(internal: BPlusNode) -> Tuple[int, BPlusNode]:
 
     # 오른쪽 새 Internal 생성
     # TODO: mid+1부터 끝까지 (중간 키 제외!)
-    new_internal = None
+    new_internal = BPlusNode(
+        is_leaf=False,
+        keys=internal.keys[mid + 1 :],
+        children=internal.children[mid + 1 :],
+    )
 
-    # 왼쪽 축소
-    # TODO: mid까지만 (중간 키 제외!)
+    # 왼쪽 축소 (대입 필수!)
+    internal.keys = internal.keys[:mid]
+    internal.children = internal.children[: mid + 1]
 
     return promote_key, new_internal
 
@@ -136,6 +141,21 @@ def insert_into_parent(
 # ======================================================================
 
 
+def insert_full(root: BPlusNode, key: int, value: str, max_keys: int) -> BPlusNode:
+    """완전한 Insert (Root Split 포함)"""
+    split_result = insert_recursive(root, key, value, max_keys)
+
+    if split_result:
+        # Root가 Split됨 → 새 Root 생성
+        promote_key, new_node = split_result
+        new_root = BPlusNode(
+            is_leaf=False, keys=[promote_key], children=[root, new_node]
+        )
+        return new_root
+
+    return root
+
+
 def insert_recursive(
     node: BPlusNode, key: int, value: str, max_keys: int
 ) -> Optional[Tuple[int, BPlusNode]]:
@@ -171,8 +191,8 @@ def insert_recursive(
     else:
         # Recursive case: 적절한 child 찾기
         # TODO: child 선택
-        child_index = None  # bisect 사용
-        child = None
+        child_index = bisect.bisect_right(node.keys, key)  # bisect 사용
+        child = node.children[child_index]
 
         # 재귀 호출
         split_result = insert_recursive(child, key, value, max_keys)
@@ -188,21 +208,6 @@ def insert_recursive(
                 return split_internal(node)
 
         return None
-
-
-def insert_full(root: BPlusNode, key: int, value: str, max_keys: int) -> BPlusNode:
-    """완전한 Insert (Root Split 포함)"""
-    split_result = insert_recursive(root, key, value, max_keys)
-
-    if split_result:
-        # Root가 Split됨 → 새 Root 생성
-        promote_key, new_node = split_result
-        new_root = BPlusNode(
-            is_leaf=False, keys=[promote_key], children=[root, new_node]
-        )
-        return new_root
-
-    return root
 
 
 # ======================================================================
