@@ -92,7 +92,6 @@ class BTreeNode:
         # 2. key_count만큼 루프 돌면서 4바이트씩 읽어 keys 리스트 복원 (<I)
         # 3. key_count + 1만큼 루프 돌면서 4바이트씩 읽어 child_pids 리스트 복원 (<I)
 
-        # TODO: 직접 구현해보세요!
         key_count = struct.unpack("<H", data[: BTreeNode.KEY_COUNT_SIZE])[0]
         offset = BTreeNode.KEY_COUNT_SIZE
 
