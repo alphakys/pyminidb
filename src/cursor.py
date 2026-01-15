@@ -117,7 +117,7 @@ class Cursor:
         """
         page_idx = self._get_page_location()[0]
         curr_page = self.table.pager.read_page(page_index=page_idx)
-        print(row)
+
         if curr_page.is_full():
             raise RuntimeError(f"Page {page_idx} is full! This should not happen.")
 
