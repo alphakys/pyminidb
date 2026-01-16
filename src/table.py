@@ -1,8 +1,10 @@
 from src.pager import Pager
-from src.page import Page
+from src.page import Page, PageType
 from src.row import Row
 from src.cursor import Cursor
+from src.node import BTreeNode
 import os
+import bisect
 
 
 class Table:
@@ -40,16 +42,18 @@ class Table:
             - row_count는 항상 정확해야 함 (Cursor가 의존)
         """
         self.pager = Pager(filename)
-        file_size = os.path.getsize(filename=filename)
-        self.page_count = file_size // Page.PAGE_SIZE
-        if self.page_count == 0:
+
+        # [Step 4.2] B+Tree Root Page ID (기본값: 0)
+        self.root_page_id = 0
+
+        if self.pager.page_count == 0:
             self.last_page_index = 0
             self.row_count = 0
         else:
-            self.last_page_index = self.page_count - 1
+            self.last_page_index = self.pager.page_count - 1
             # 테이블에 존재하는 모든 row의 총 개수
             self.row_count = (
-                (self.page_count - 1) * Page.MAX_ROWS
+                (self.pager.page_count - 1) * Page.MAX_ROWS
             ) + self.pager.read_page(self.last_page_index).row_count
 
     def table_start(self) -> Cursor:
@@ -83,6 +87,34 @@ class Table:
             - save() 호출 후 table.row_count를 증가시켜야 함
         """
         return Cursor(self, row_index=self.row_count)
+
+    def find_leaf(self, key: int) -> int:
+        """
+        [Step 4.2] 주어진 키가 존재할 Leaf Page의 PID를 반환
+
+        Args:
+            key: 검색할 키
+
+        Returns:
+            int: Leaf Page ID
+
+        알고리즘:
+            1. Root Page 로드 (self.root_page_id)
+            2. while page.is_leaf == False:
+                a. keys, pids = page.read_internal_node()
+                b. bisect.bisect_right(keys, key)로 구간 찾기
+                c. pids[index] 페이지로 이동
+            3. current_page_id 반환
+        """
+        page = self.pager.read_page(self.root_page_id)
+        pid = self.root_page_id
+        while not page.is_leaf:
+            keys, childs = page.read_internal_node()
+            idx = bisect.bisect_right(keys, key)
+            pid = childs[idx]
+            page = self.pager.read_page(pid)
+
+        return pid
 
     def execute_insert(self, id: int, username: str, email: str) -> bool:
         """
