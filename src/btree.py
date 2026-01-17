@@ -1,0 +1,221 @@
+"""
+Step 4.3: B+Tree Insert & Split Manager
+
+BTreeManager: B+Tree 삽입 및 Split 로직을 담당하는 클래스
+"""
+
+from src.row import Row
+from src.page import Page, PageType
+from src.pager import Pager
+from src.table import Table
+from src.node import BTreeNode
+from typing import Tuple, Optional
+import bisect
+from src.cursor import Cursor
+
+
+class BTreeManager:
+    """
+    B+Tree 삽입 및 Split 관리자
+
+    책임:
+    - Leaf/Internal Split
+    - Insert into Parent (재귀)
+    - Root Split 처리
+    """
+
+    def __init__(self, table: "Table"):
+        """
+        Args:
+            table: Table 객체 (pager, root_page_id 접근용)
+        """
+        self.table = table
+        self.pager: Pager = table.pager
+
+    def insert(self, row: Row) -> bool:
+        """
+        B+Tree에 Row 삽입
+
+        알고리즘:
+        1. find_leaf로 삽입할 Leaf PID 찾기
+        2. Leaf 로드
+        3. 공간 있으면 바로 삽입
+        4. 없으면 split_leaf 후 insert_into_parent
+
+        Args:
+            row: 삽입할 Row
+
+        Returns:
+            bool: 성공 여부
+        """
+        # TODO: 구현해보세요!
+        path = []
+        leaf_pid = self.table.find_leaf()
+        leaf = self.pager.read_page(leaf_pid)
+
+        page.write_at()
+        # 힌트:
+        # - leaf_pid = self.table.find_leaf(row.user_id)
+        # - leaf_page = self.pager.read_page(leaf_pid)
+        # - if not leaf_page.is_full(): 직접 삽입
+        # - else: split_leaf 호출
+        pass
+
+    def split_leaf(self, leaf_pid: int) -> Tuple[int, int]:
+        """
+        Leaf Page Split
+
+        동작:
+        1. 기존 Leaf 로드
+        2. 중간 지점(MAX_ROWS // 2) 계산
+        3. 새 Leaf 생성 (get_new_page_id)
+        4. 우측 절반 데이터를 새 Leaf로 이동
+        5. Sibling pointer 연결
+        6. 양쪽 페이지 저장
+
+        Args:
+            leaf_pid: Split할 Leaf PID
+
+        Returns:
+            (new_right_pid, promote_key):
+                - new_right_pid: 새로 생성된 우측 Leaf PID
+                - promote_key: 우측의 첫 번째 키 (부모에 삽입용)
+        """
+        old_leaf = self.pager.read_page(leaf_pid)
+        mid = old_leaf.row_count // 2
+
+        # 새 Leaf 생성
+        new_pid = self.pager.get_new_page_id()
+        new_page = Page(page_type=PageType.LEAF)
+
+        # 데이터 복사
+        old_offset = Page.HEADER_SIZE + (mid * Page.ROW_SIZE)
+        old_end = Page.HEADER_SIZE + (old_leaf.row_count * Page.ROW_SIZE)
+        copy_size = old_end - old_offset
+
+        new_offset = Page.HEADER_SIZE
+        new_page.data[new_offset : new_offset + copy_size] = old_leaf.data[
+            old_offset:old_end
+        ]
+
+        # Garbage 클리어 (개선!)
+        old_leaf.data[old_offset:old_end] = b"\x00" * copy_size
+
+        # 메타데이터 갱신
+        new_page.row_count = old_leaf.row_count - mid
+        old_leaf.row_count = mid
+        old_leaf._next_page_id = new_pid
+
+        # Header 업데이트 (메서드 이름 수정!)
+        old_leaf._update_header()
+        new_page._update_header()
+
+        # 저장
+        self.pager.write_page(leaf_pid, old_leaf)
+        self.pager.write_page(new_pid, new_page)
+
+        # Promote Key
+        promote_key = new_page.read_at(0).user_id
+        return new_pid, promote_key
+
+    def split_internal(self, node_pid: int) -> Tuple[int, int]:
+        """
+        Internal Page Split
+
+        동작:
+        1. 기존 Internal 로드 (keys, pids)
+        2. 중간 인덱스(mid) 계산
+        3. 좌측: keys[:mid], pids[:mid+1]
+        4. 우측: keys[mid+1:], pids[mid+1:]
+        5. Promote: keys[mid]
+        6. 새 Internal 생성 및 저장
+
+        Args:
+            node_pid: Split할 Internal PID
+
+        Returns:
+            (new_right_pid, promote_key)
+        """
+        # 1. 기존 Internal 로드
+        old_internal_node = self.pager.read_page(node_pid)
+        keys, pids = old_internal_node.read_internal_node()
+
+        # 2. 중간 지점 및 분할
+        mid = len(keys) // 2  # row_count 대신 len(keys) 사용 (더 명확)
+        promote_key = keys[mid]
+
+        left_keys = keys[:mid]
+        left_pids = pids[: mid + 1]
+        right_keys = keys[mid + 1 :]
+        right_pids = pids[mid + 1 :]
+
+        # 3. 새 Internal 생성 (Right)
+        new_pid = self.pager.get_new_page_id()
+        new_page = Page(page_type=PageType.INTERNAL)
+        new_page.write_internal_node(right_keys, right_pids)  # row_count 자동 설정됨
+
+        # 4. 기존 Internal 업데이트 (Left)
+        old_internal_node.write_internal_node(
+            left_keys, left_pids
+        )  # row_count 자동 설정됨
+
+        # 5. 저장
+        self.pager.write_page(node_pid, old_internal_node)
+        self.pager.write_page(new_pid, new_page)
+
+        return new_pid, promote_key
+
+    def insert_into_parent(
+        self, left_pid: int, key: int, right_pid: int, parent_pid: Optional[int] = None
+    ):
+        """
+        부모 노드에 키 삽입
+
+        Cases:
+        1. 부모 없음 (Root Split) → 새 Root 생성
+        2. 부모 있고 공간 있음 → 직접 삽입
+        3. 부모 있고 가득 참 → split_internal 후 재귀
+
+        Args:
+            left_pid: 좌측 Child PID
+            key: 삽입할 키
+            right_pid: 우측 Child PID
+            parent_pid: 부모 PID (None이면 Root Split)
+        """
+        # TODO: 가장 복잡한 부분! 천천히 구현
+        # Case 1: Root Split
+        if parent_pid is None:
+            # 새 Root 생성
+            # new_root_pid = self.pager.get_new_page_id()
+            # root = Page(page_type=PageType.INTERNAL)
+            # root.write_internal_node(keys=[key], pids=[left_pid, right_pid])
+            # self.pager.write_page(new_root_pid, root)
+            # self.table.root_page_id = new_root_pid
+            new_root_pid = self.pager.get_new_page_id()
+            root = Page(PageType.INTERNAL)
+            root.write_internal_node(keys=[key], pids=[left_pid, right_pid])
+            self.pager.write_page(new_root_pid, root)
+            self.table.root_page_id = new_root_pid
+
+        else:
+            # Case 2 & 3: 부모에 삽입
+
+            parent_page = self.pager.read_page(parent_pid)
+
+            keys, pids = parent_page.read_internal_node()
+
+            if len(keys) > BTreeNode.MAX_KEYS:
+                # 공간 없음
+                new_pid, promote_key = self.split_internal(parent_pid)
+                self.insert_into_parent(
+                    left_pid=parent_pid,
+                    key=promote_key,
+                    right_pid=new_pid,
+                    parent_pid=1,
+                )
+
+            else:
+                # 공간 있음
+                idx = bisect.bisect_right(keys, key)
+                keys.insert(idx, key)
+                pids.insert(idx, right_pid)

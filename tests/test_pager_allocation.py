@@ -62,7 +62,7 @@ def test_pager_allocation():
     # 식별을 위해 데이터 조금 씀 (Header 이후 Body 영역에)
     # Header가 손상되지 않도록 주의! Offset 20부터 작성
     page.data[20:24] = b"\xbe\xef\xca\xfe"
-    page._update_header()  # [Fix] Header 정보를 data에 반영해야 함!
+    page.update_header()  # [Fix] Header 정보를 data에 반영해야 함!
 
     pager.write_page(2, page)
 

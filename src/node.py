@@ -32,10 +32,39 @@ class BTreeNode:
         [0x03, 0x00] [0x0A, 0x00, 0x00, 0x00] [0x14, ...] [0x1E, ...]
         [0x01, 0x00, 0x00, 0x00] [0x02, ...] [0x03, ...] [0x04, ...]
         [0x01, 0x00, 0x00, 0x00] [0x02, ...] [0x03, ...] [0x04, ...]
+
+
+    # Internal Node에 몇 개의 key, pid를 적재해야 할 것인가?
+    Page 구조:
+    - Header: 9 bytes
+    - Body: 4087 bytes (4096 - 9)
+
+    Internal Node Body:
+    - key_count: 2 bytes
+    - N keys: N × 4 bytes
+    - (N+1) pids: (N+1) × 4 bytes
+
+    Total = 2 + 4N + 4(N+1) = 6 + 8N
+
+    공간 제약:
+    6 + 8N ≤ 4087
+    8N ≤ 4081
+    N ≤ 510.125
+
+    → MAX_KEYS = 510
+    → MAX_CHILDREN = 511 (Order = 511)
     """
 
     KEY_COUNT_SIZE = 2
     INT_SIZE = 4
+
+    # 이론상 최대값의 70~80%만 사용
+    FILL_FACTOR = 0.9
+    MAX_KEYS = 10
+    MAX_CHILDREN = 11
+    ORDER = 11
+
+    MAX_KEYS_SPLIT = MAX_KEYS * FILL_FACTOR
 
     @staticmethod
     def serialize_internal(keys: List[int], child_pids: List[int]) -> bytes:

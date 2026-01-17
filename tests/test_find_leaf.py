@@ -39,17 +39,17 @@ def setup_btree_structure():
 
     # Leaf 1 - PID 1 (keys < 20)
     leaf1 = Page(page_type=PageType.LEAF)
-    leaf1._update_header()
+    leaf1.update_header()
     pager.write_page(1, leaf1)
 
     # Leaf 2 - PID 2 (20 <= keys < 40)
     leaf2 = Page(page_type=PageType.LEAF)
-    leaf2._update_header()
+    leaf2.update_header()
     pager.write_page(2, leaf2)
 
     # Leaf 3 - PID 3 (keys >= 40)
     leaf3 = Page(page_type=PageType.LEAF)
-    leaf3._update_header()
+    leaf3.update_header()
     pager.write_page(3, leaf3)
 
     pager.close()

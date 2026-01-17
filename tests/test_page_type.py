@@ -59,7 +59,7 @@ def test_page_type():
     # Test 4: Internal Page 직렬화/역직렬화
     print("\n[Test 4] Internal Page 직렬화/역직렬화")
     internal_page._row_count = 3  # keys 3개 있다고 가정
-    internal_page._update_header()
+    internal_page.update_header()
 
     serialized_internal = bytes(internal_page.data)
     restored_internal = Page(raw_data=serialized_internal)

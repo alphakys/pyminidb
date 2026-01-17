@@ -72,8 +72,3 @@ class Row:
         return (
             f"Row(id={self.user_id}, username='{self.username}', email='{self.email}')"
         )
-
-
-if __name__ == "__main__":
-    r = Row(1, "sdf", "sdfsdf")
-    print(r)

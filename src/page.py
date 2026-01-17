@@ -46,33 +46,32 @@ class Page:
             self.data: bytearray = bytearray(raw_data)
             # 🔧 Header 전체 언팩 (4개 필드 모두)
             header_values = self.header_struct.unpack(self.data[: Page.HEADER_SIZE])
-            self._row_count = header_values[0]
-            self._page_type = PageType(header_values[1])  # Enum으로 변환
+            self.row_count = header_values[0]
+            self.page_type = PageType(header_values[1])  # Enum으로 변환
             self._free_space = header_values[2]
-            self._next_page_id = header_values[3]
+            self._next_page_id: int = header_values[3]
         else:
             self.data: bytearray = bytearray(Page.PAGE_SIZE)
-            self._row_count = 0
-            self._page_type = page_type  # 생성 시 타입 지정
+            self.row_count = 0
+            self.page_type = page_type  # 생성 시 타입 지정
             self._free_space = 0
-            self._next_page_id = 0
+            self._next_page_id: int = 0
+            self._update_header()
 
-    @property
     def row_count(self):
         """
         Row의 개수가 몇개 인지 반환
         """
-        return self._row_count
+        return self.row_count
 
     @property
     def is_leaf(self) -> bool:
         """이 페이지가 Leaf인지 확인"""
-        return self._page_type == PageType.LEAF
+        return self.page_type == PageType.LEAF
 
-    @property
     def page_type(self) -> PageType:
         """페이지 타입 반환"""
-        return self._page_type
+        return self.page_type
 
     def _update_header(self):
         """
@@ -80,11 +79,11 @@ class Page:
         insert 할 때마다 호출해줘야 디스크에도 개수가 저장되겠죠?
         """
         self.data[: Page.HEADER_SIZE] = self.header_struct.pack(
-            self._row_count, self._page_type, self._free_space, self._next_page_id
+            self.row_count, self.page_type, self._free_space, self._next_page_id
         )
 
     def is_full(self) -> bool:
-        return True if self._row_count >= Page.MAX_ROWS else False
+        return True if self.row_count >= Page.MAX_ROWS else False
 
     def write_at(self, row: Row) -> bool:
         """
@@ -92,12 +91,12 @@ class Page:
         Row가 저장될 위치는 이제 0이 아니라 4(HEADER_SIZE)부터 시작합니다.
         New Offset = HEADER_SIZE + (index * ROW_SIZE)
 
-        그리고 성공 후에 _update_header()를 꼭 호출하세요.
+        그리고 성공 후에 update_header()를 꼭 호출하세요.
         """
-        offset = Page.HEADER_SIZE + (self._row_count * Page.ROW_SIZE)
+        offset = Page.HEADER_SIZE + (self.row_count * Page.ROW_SIZE)
         end = offset + Page.ROW_SIZE
         self.data[offset:end] = row.serialize()
-        self._row_count += 1
+        self.row_count += 1
         self._update_header()
         return True
 
@@ -129,7 +128,7 @@ class Page:
             self.data[Page.HEADER_SIZE : Page.HEADER_SIZE + len(body)] = body
 
             # RowCount는 Key 개수로 사용
-            self._row_count = len(keys)
+            self.row_count = len(keys)
             self._update_header()
         else:
             raise TypeError("Not an Internal page")
