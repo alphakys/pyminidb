@@ -5,6 +5,7 @@ from src.cursor import Cursor
 from src.node import BTreeNode
 import os
 import bisect
+from typing import List
 
 
 class Table:
@@ -96,7 +97,7 @@ class Table:
             key: 검색할 키
 
         Returns:
-            int: Leaf Page ID
+            int: leaf pid 반환
 
         알고리즘:
             1. Root Page 로드 (self.root_page_id)
@@ -104,7 +105,7 @@ class Table:
                 a. keys, pids = page.read_internal_node()
                 b. bisect.bisect_right(keys, key)로 구간 찾기
                 c. pids[index] 페이지로 이동
-            3. current_page_id 반환
+            3. leaf page id 반환
         """
         page = self.pager.read_page(self.root_page_id)
         pid = self.root_page_id
@@ -115,6 +116,37 @@ class Table:
             page = self.pager.read_page(pid)
 
         return pid
+
+    def find_path_to_leaf(self, key: int) -> List[int]:
+        """
+        [Step 4.2] 주어진 키가 존재할 Leaf Page의 PID를 반환
+
+        Args:
+            key: 검색할 키
+
+        Returns:
+            List[int]: Leaf Page ID를 찾기까지 방문한 모든 pid를 list로 담아서
+            반환
+
+        알고리즘:
+            1. Root Page 로드 (self.root_page_id)
+            2. while page.is_leaf == False:
+                a. keys, pids = page.read_internal_node()
+                b. bisect.bisect_right(keys, key)로 구간 찾기
+                c. pids[index] 페이지로 이동
+            3. path 반환
+        """
+        page = self.pager.read_page(self.root_page_id)
+        pid = self.root_page_id
+        path = [pid]
+        while not page.is_leaf:
+            keys, childs = page.read_internal_node()
+            idx = bisect.bisect_right(keys, key)
+            pid = childs[idx]
+            path.append(pid)
+            page = self.pager.read_page(pid)
+
+        return path
 
     def execute_insert(self, id: int, username: str, email: str) -> bool:
         """

@@ -9,7 +9,7 @@ from src.page import Page, PageType
 from src.pager import Pager
 from src.table import Table
 from src.node import BTreeNode
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import bisect
 from src.cursor import Cursor
 
@@ -48,18 +48,24 @@ class BTreeManager:
         Returns:
             bool: 성공 여부
         """
-        # TODO: 구현해보세요!
-        path = []
-        leaf_pid = self.table.find_leaf()
+        path = self.table.find_path_to_leaf(row.user_id)
+        leaf_pid = path[-1]
         leaf = self.pager.read_page(leaf_pid)
 
-        page.write_at()
-        # 힌트:
-        # - leaf_pid = self.table.find_leaf(row.user_id)
-        # - leaf_page = self.pager.read_page(leaf_pid)
-        # - if not leaf_page.is_full(): 직접 삽입
-        # - else: split_leaf 호출
-        pass
+        if leaf.is_full:
+            new_pid, promote_key = self.split_leaf(leaf_pid)
+            self.insert_into_parent(
+                left_pid=leaf_pid,
+                key=promote_key,
+                right_pid=new_pid,
+                path=path[:-1],
+                parent_pid=path[:-1][-1] if len(path[:-1]) > 0 else None,
+            )
+        else:
+            leaf.write_at(row)
+            self.pager.write_page(page_index=leaf_pid, page=leaf)
+
+        return True
 
     def split_leaf(self, leaf_pid: int) -> Tuple[int, int]:
         """
@@ -166,7 +172,12 @@ class BTreeManager:
         return new_pid, promote_key
 
     def insert_into_parent(
-        self, left_pid: int, key: int, right_pid: int, parent_pid: Optional[int] = None
+        self,
+        left_pid: int,
+        key: int,
+        right_pid: int,
+        path: List[int],
+        parent_pid: Optional[int] = None,
     ):
         """
         부모 노드에 키 삽입
@@ -186,13 +197,8 @@ class BTreeManager:
         # Case 1: Root Split
         if parent_pid is None:
             # 새 Root 생성
-            # new_root_pid = self.pager.get_new_page_id()
-            # root = Page(page_type=PageType.INTERNAL)
-            # root.write_internal_node(keys=[key], pids=[left_pid, right_pid])
-            # self.pager.write_page(new_root_pid, root)
-            # self.table.root_page_id = new_root_pid
             new_root_pid = self.pager.get_new_page_id()
-            root = Page(PageType.INTERNAL)
+            root = Page(raw_data=None, page_type=PageType.INTERNAL)
             root.write_internal_node(keys=[key], pids=[left_pid, right_pid])
             self.pager.write_page(new_root_pid, root)
             self.table.root_page_id = new_root_pid
@@ -207,6 +213,7 @@ class BTreeManager:
             if len(keys) > BTreeNode.MAX_KEYS:
                 # 공간 없음
                 new_pid, promote_key = self.split_internal(parent_pid)
+
                 self.insert_into_parent(
                     left_pid=parent_pid,
                     key=promote_key,

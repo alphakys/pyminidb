@@ -82,6 +82,7 @@ class Page:
             self.row_count, self.page_type, self._free_space, self._next_page_id
         )
 
+    @property
     def is_full(self) -> bool:
         return True if self.row_count >= Page.MAX_ROWS else False
 
@@ -132,3 +133,7 @@ class Page:
             self._update_header()
         else:
             raise TypeError("Not an Internal page")
+
+
+if __name__ == "__main__":
+    print(Page.MAX_ROWS)
