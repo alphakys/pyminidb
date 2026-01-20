@@ -157,7 +157,7 @@ class BTreeManager:
 
         # 3. 새 Internal 생성 (Right)
         new_pid = self.pager.get_new_page_id()
-        new_page = Page(page_type=PageType.INTERNAL)
+        new_page = Page(raw_data=None, page_type=PageType.INTERNAL)
         new_page.write_internal_node(right_keys, right_pids)  # row_count 자동 설정됨
 
         # 4. 기존 Internal 업데이트 (Left)
@@ -205,24 +205,32 @@ class BTreeManager:
 
         else:
             # Case 2 & 3: 부모에 삽입
-
             parent_page = self.pager.read_page(parent_pid)
-
             keys, pids = parent_page.read_internal_node()
 
-            if len(keys) > BTreeNode.MAX_KEYS:
-                # 공간 없음
+            # ✅ 먼저 키를 삽입 (공간 여부와 관계없이!)
+            idx = bisect.bisect_right(keys, key)
+            keys.insert(idx, key)
+            pids.insert(idx + 1, right_pid)
+
+            if (
+                len(keys) > BTreeNode.MAX_KEYS
+            ):  # Note: MAX_KEYS는 최대 키 개수이므로, 초과하면 split
+                # Case 3: 공간 없음 - 저장 후 Split
+                parent_page.write_internal_node(keys, pids)
+                self.pager.write_page(parent_pid, parent_page)
+
                 new_pid, promote_key = self.split_internal(parent_pid)
+                grandparent_pid = path[-1] if len(path) > 0 else None
 
                 self.insert_into_parent(
                     left_pid=parent_pid,
                     key=promote_key,
                     right_pid=new_pid,
-                    parent_pid=1,
+                    parent_pid=grandparent_pid,
+                    path=path[:-1] if len(path) > 0 else [],
                 )
-
             else:
-                # 공간 있음
-                idx = bisect.bisect_right(keys, key)
-                keys.insert(idx, key)
-                pids.insert(idx, right_pid)
+                # Case 2: 공간 있음 - 그냥 저장
+                parent_page.write_internal_node(keys, pids)
+                self.pager.write_page(parent_pid, parent_page)
