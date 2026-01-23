@@ -133,7 +133,3 @@ class Page:
             self._update_header()
         else:
             raise TypeError("Not an Internal page")
-
-
-if __name__ == "__main__":
-    print(Page.MAX_ROWS)
