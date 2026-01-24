@@ -9,9 +9,10 @@ from src.page import Page, PageType
 from src.pager import Pager
 from src.table import Table
 from src.node import BTreeNode
-from typing import Tuple, Optional, List
-import bisect
+from typing import Tuple, Optional, List, Iterator
 from src.cursor import Cursor
+
+import bisect
 
 
 class BTreeManager:
@@ -32,6 +33,81 @@ class BTreeManager:
         self.table = table
         self.pager: Pager = table.pager
 
+    def _find_path_to_leaf(self, key: int) -> List[int]:
+        """
+        주어진 키가 존재할 Leaf Page의 경로를 반환 (Private 메서드)
+
+        Args:
+            key: 검색할 키
+
+        Returns:
+            List[int]: Root부터 Leaf까지 방문한 모든 PID
+
+        알고리즘:
+            1. Root Page 로드
+            2. Internal Node를 따라 내려가며 경로 기록
+            3. Leaf에 도달하면 경로 반환
+        """
+        page = self.pager.read_page(self.table.root_page_id)
+        pid = self.table.root_page_id
+        path = [pid]
+
+        while not page.is_leaf:
+            keys, childs = page.read_internal_node()
+            idx = bisect.bisect_right(keys, key)
+            pid = childs[idx]
+            path.append(pid)
+            page = self.pager.read_page(pid)
+
+        return path
+
+    def scan(self, start_key: int, end_key: int) -> Iterator[Row]:
+        """
+        B+Tree Range Scan - Iterator Pattern으로 범위 내 Row 반환
+
+        Algorithm:
+            1. start_key가 있을 Leaf Page 찾기 (_find_path_to_leaf)
+            2. Sibling pointer를 따라 Leaf Page 순회 (Outer Loop)
+            3. 각 페이지의 Row 필터링 (Inner Loop):
+                - key < start_key → continue (첫 페이지에서만 발생)
+                - key > end_key → return (조기 종료, 불필요한 I/O 방지)
+                - start_key <= key <= end_key → yield
+
+        Args:
+            start_key: 시작 키 (inclusive)
+            end_key: 종료 키 (inclusive)
+
+        Yields:
+            Row: 범위 내의 Row 객체들 (정렬된 순서로)
+
+        Example:
+            >>> btree = BTreeManager(table)
+            >>> for row in btree.scan(10, 100):
+            ...     print(row.user_id, row.username)
+
+        Performance:
+            - Time: O(log N + K), N=총 Row 수, K=반환되는 Row 수
+            - Space: O(1) - Generator 사용으로 메모리 효율적
+        """
+        leaf_pid = self._find_path_to_leaf(start_key)[-1]
+        leaf_page = self.pager.read_page(leaf_pid)
+
+        while leaf_page:
+            for i in range(leaf_page.row_count):
+                row = leaf_page.read_at(i)
+                key = row.user_id
+                if key < start_key:
+                    continue
+
+                if key > end_key:
+                    return
+                yield row
+
+            if not leaf_page.has_next_sibling:
+                return
+
+            leaf_page = self.pager.read_page(leaf_page.next_sibling_id)
+
     def insert(self, row: Row) -> bool:
         """
         B+Tree에 Row 삽입
@@ -48,7 +124,7 @@ class BTreeManager:
         Returns:
             bool: 성공 여부
         """
-        path = self.table.find_path_to_leaf(row.user_id)
+        path = self._find_path_to_leaf(row.user_id)
         leaf_pid = path[-1]
         leaf = self.pager.read_page(leaf_pid)
 
@@ -61,7 +137,19 @@ class BTreeManager:
                 path=path[:-1],
                 parent_pid=path[:-1][-1] if len(path[:-1]) > 0 else None,
             )
-        else:
+            # ============================================================
+            # 🔴 [TODO] 여기를 수정해야 합니다!
+            # ============================================================
+            # 현재 문제: write_at()은 그냥 끝에 append합니다
+            #
+            # B+Tree 불변식: Leaf 내부의 Key들은 항상 정렬되어 있어야 함!
+            #
+            # 해결 방법:
+            # 1. bisect.bisect_left()로 정렬된 삽입 위치 찾기
+            # 2. 뒤쪽 Row들을 한 칸씩 shift
+            # 3. 해당 위치에 새 Row 삽입
+            # 4. row_count 증가 및 header 업데이트
+            # ============================================================
             leaf.write_at(row)
             self.pager.write_page(page_index=leaf_pid, page=leaf)
 

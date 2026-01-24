@@ -4,6 +4,11 @@ from typing import ClassVar, Optional, Tuple, List
 from enum import IntEnum
 import struct
 
+# [Sentinel Value] "다음 페이지 없음"을 의미하는 특별한 값
+# 현재는 0을 사용하지만, 나중에 0xFFFFFFFF로 변경 가능
+# (PostgreSQL/MySQL 스타일로 전환 시 여기만 수정하면 됨)
+INVALID_PAGE_ID = 0
+
 
 class PageType(IntEnum):
     """Page 타입 구분"""
@@ -55,7 +60,7 @@ class Page:
             self.row_count = 0
             self.page_type = page_type  # 생성 시 타입 지정
             self._free_space = 0
-            self._next_page_id: int = 0
+            self._next_page_id: int = INVALID_PAGE_ID
             self._update_header()
 
     def row_count(self):
@@ -68,6 +73,44 @@ class Page:
     def is_leaf(self) -> bool:
         """이 페이지가 Leaf인지 확인"""
         return self.page_type == PageType.LEAF
+
+    @property
+    def has_next_sibling(self) -> bool:
+        """
+        다음 형제 Leaf Page가 존재하는지 확인
+
+        Returns:
+            bool: True if next sibling exists, False otherwise
+
+        Example:
+            >>> if page.has_next_sibling:
+            ...     next_page = pager.read_page(page.next_sibling_id)
+
+        Note:
+            INVALID_PAGE_ID는 "다음 페이지 없음"을 의미합니다.
+            Root Page ID도 0이지만, Leaf chain에서는 혼동 없음.
+            (Root는 Internal이 되면 sibling chain에서 제외됨)
+        """
+        return self._next_page_id != INVALID_PAGE_ID
+
+    @property
+    def next_sibling_id(self) -> int:
+        """
+        다음 형제 페이지 ID (raw value)
+
+        Returns:
+            int: 다음 페이지 ID (INVALID_PAGE_ID일 수 있음)
+
+        Warning:
+            사용 전 has_next_sibling을 먼저 체크하세요!
+            확인하지 않으면 INVALID_PAGE_ID를 반환할 수 있습니다.
+
+        Example:
+            >>> if page.has_next_sibling:
+            ...     next_pid = page.next_sibling_id
+            ...     next_page = pager.read_page(next_pid)
+        """
+        return self._next_page_id
 
     def page_type(self) -> PageType:
         """페이지 타입 반환"""
@@ -85,6 +128,23 @@ class Page:
     @property
     def is_full(self) -> bool:
         return True if self.row_count >= Page.MAX_ROWS else False
+
+    def get_next_sibling_id(self) -> Optional[int]:
+        """
+        다음 형제 Leaf Page ID 반환
+
+        Returns:
+            int: 다음 페이지 ID (있을 경우)
+            None: 더 이상 형제 페이지 없음
+
+        Example:
+            >>> next_pid = page.get_next_sibling_id()
+            >>> if next_pid is not None:
+            ...     next_page = pager.read_page(next_pid)
+        """
+        if self._next_page_id == INVALID_PAGE_ID:
+            return None
+        return self._next_page_id
 
     def write_at(self, row: Row) -> bool:
         """
