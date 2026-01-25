@@ -137,20 +137,23 @@ class BTreeManager:
                 path=path[:-1],
                 parent_pid=path[:-1][-1] if len(path[:-1]) > 0 else None,
             )
-            # ============================================================
-            # 🔴 [TODO] 여기를 수정해야 합니다!
-            # ============================================================
-            # 현재 문제: write_at()은 그냥 끝에 append합니다
-            #
-            # B+Tree 불변식: Leaf 내부의 Key들은 항상 정렬되어 있어야 함!
-            #
-            # 해결 방법:
-            # 1. bisect.bisect_left()로 정렬된 삽입 위치 찾기
-            # 2. 뒤쪽 Row들을 한 칸씩 shift
-            # 3. 해당 위치에 새 Row 삽입
-            # 4. row_count 증가 및 header 업데이트
-            # ============================================================
-            leaf.write_at(row)
+        else:
+            # Leaf에 정렬된 위치에 삽입 (B+Tree Invariant 유지)
+            keys = [leaf.read_at(i).user_id for i in range(leaf.row_count)]
+            insert_idx = bisect.bisect_left(keys, row.user_id)
+
+            # Shift: insert_idx부터 뒤쪽 Row들을 한 칸씩 오른쪽으로
+            for i in range(leaf.row_count - 1, insert_idx - 1, -1):
+                old_row = leaf.read_at(i)
+                leaf.write_at(i + 1, old_row)  # write_at은 row_count 건드리지 않음
+
+            # Insert: insert_idx 위치에 새 Row 삽입
+            leaf.write_at(insert_idx, row)
+
+            # Metadata 업데이트
+            leaf.row_count += 1
+            leaf._update_header()
+
             self.pager.write_page(page_index=leaf_pid, page=leaf)
 
         return True

@@ -34,7 +34,7 @@ class Page:
     # OS Page Size
     PAGE_SIZE: ClassVar[int] = 4096
     ROW_SIZE: ClassVar[int] = Row(0, "", "").size
-    MAX_ROWS: ClassVar[int] = (PAGE_SIZE - 9) // ROW_SIZE
+    MAX_ROWS: ClassVar[int] = 10  # (PAGE_SIZE - 9) // ROW_SIZE
 
     # [New] Header Constants
     HEADER_FORMAT: ClassVar[str] = f"<HBHI"
@@ -146,17 +146,71 @@ class Page:
             return None
         return self._next_page_id
 
-    def write_at(self, row: Row) -> bool:
+    def write_at(self, index: int, row: Row) -> None:
         """
-        [TODO 3] Offset 계산 공식 수정
-        Row가 저장될 위치는 이제 0이 아니라 4(HEADER_SIZE)부터 시작합니다.
-        New Offset = HEADER_SIZE + (index * ROW_SIZE)
+        특정 index 위치에 Row 덮어쓰기 (Low-level operation)
 
-        그리고 성공 후에 update_header()를 꼭 호출하세요.
+        ⚠️ 주의: row_count를 건드리지 않음!
+        호출자가 직접 row_count와 _update_header()를 관리해야 함.
+
+        Args:
+            index: 0-based index (0 <= index < MAX_ROWS)
+            row: 덮어쓸 Row 객체
+
+        Raises:
+            IndexError: index가 유효 범위를 벗어난 경우
+
+        Use Cases:
+            - BTreeManager의 sorted insert (shift 연산)
+            - Update 연산 (미래)
+            - 내부적으로 append()에서 사용
+
+        Example:
+            >>> # Shift 연산 예시
+            >>> for i in range(page.row_count - 1, insert_pos - 1, -1):
+            ...     old_row = page.read_at(i)
+            ...     page.write_at(i + 1, old_row)  # row_count 건드리지 않음!
+            >>> page.write_at(insert_pos, new_row)
+            >>> page.row_count += 1  # 호출자가 관리!
+            >>> page._update_header()
         """
-        offset = Page.HEADER_SIZE + (self.row_count * Page.ROW_SIZE)
+        if index < 0 or index >= Page.MAX_ROWS:
+            raise IndexError(f"Index {index} out of range [0, {Page.MAX_ROWS})")
+
+        offset = Page.HEADER_SIZE + (index * Page.ROW_SIZE)
         end = offset + Page.ROW_SIZE
         self.data[offset:end] = row.serialize()
+
+    def append(self, row: Row) -> bool:
+        """
+        Leaf 끝에 Row 추가 (High-level operation)
+
+        내부적으로 write_at(row_count, row) 호출 후
+        row_count 증가 및 header 업데이트를 자동으로 수행.
+
+        Args:
+            row: 추가할 Row 객체
+
+        Returns:
+            bool: 성공 여부 (항상 True, 호환성 유지)
+
+        Raises:
+            OverflowError: Page가 가득 찬 경우
+
+        Use Cases:
+            - Sequential insert (기존 write_at 대체)
+            - Split 후 데이터 추가
+
+        Example:
+            >>> page.append(Row(10, 'alice', 'alice@test.com'))
+            True
+            >>> page.row_count
+            1
+        """
+        if self.row_count >= Page.MAX_ROWS:
+            raise OverflowError(f"Page is full (MAX_ROWS={Page.MAX_ROWS})")
+
+        self.write_at(self.row_count, row)
         self.row_count += 1
         self._update_header()
         return True
